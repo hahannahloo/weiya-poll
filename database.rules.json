@@ -1,0 +1,12 @@
+{
+  "rules": {
+    "state": { ".read": true, ".write": true },
+    "votes": {
+      ".read": true,
+      "$q": {
+        ".write": true,
+        "$device": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() < 20" }
+      }
+    }
+  }
+}
