@@ -193,14 +193,9 @@ const CONFIG = {
   subtitle: "丙午年 · 同樂之夜",
   adminPin: "8888",            // 主持人控制台密碼
 
-  // 填入 Firebase 設定後就會變成正式版；留空 = 示範模式（只在本機瀏覽器同步）
-  firebase: {
-    apiKey: "",
-    authDomain: "",
-    databaseURL: "",
-    projectId: "",
-    appId: ""
-  },
+  // 填入 Cloudflare 即時伺服器網址就會變成正式版，例如 "https://weiya-poll-api.你的帳號.workers.dev"
+  // 留空 = 示範模式（只在同一台電腦的瀏覽器分頁之間同步）
+  realtimeUrl: "",
 
   questions: [
     { q: "今晚你最期待的是？", options: ["🍖 吃好料", "🧧 抽大獎", "🍻 跟同事喝一杯", "🏠 準時回家"] },
@@ -250,7 +245,9 @@ function makeDemoBackend(){
     demo: true,
     onState(cb){ stateSubs.add(cb); setTimeout(() => cb({ ...mem.state })); return () => stateSubs.delete(cb); },
     onVotes(q, cb){ const s = { q, cb }; voteSubs.add(s); setTimeout(() => cb({ ...(mem.votes[q] || {}) })); return () => voteSubs.delete(s); },
+    onTally(q, cb){ return this.onVotes(q, v => cb(tally(q, v))); },
     onMyVote(q, dev, cb){ return this.onVotes(q, v => cb(v[dev] ?? null)); },
+    onConn(cb){ cb(true); return () => {}; },
     setState(p){ load(); Object.assign(mem.state, p); save(); return Promise.resolve(); },
     vote(q, dev, opt){ load(); (mem.votes[q] = mem.votes[q] || {})[dev] = opt; save(); return Promise.resolve(); },
     reset(q){ load(); delete mem.votes[q]; save(); return Promise.resolve(); },
@@ -270,25 +267,62 @@ function makeDemoBackend(){
   };
 }
 
-/* ---------- backend: Firebase Realtime Database ---------- */
-function loadScript(src){
-  return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
-}
-async function makeFirebaseBackend(cfg){
-  const V = '10.12.2';
-  await loadScript(`https://www.gstatic.com/firebasejs/${V}/firebase-app-compat.js`);
-  await loadScript(`https://www.gstatic.com/firebasejs/${V}/firebase-database-compat.js`);
-  firebase.initializeApp(cfg);
-  const db = firebase.database();
-  const listen = (path, cb) => { const r = db.ref(path); const h = r.on('value', s => cb(s.val())); return () => r.off('value', h); };
+/* ---------- backend: Cloudflare Worker (WebSocket) ---------- */
+function makeCloudflareBackend(base){
+  const wsUrl = base.trim().replace(/\/+$/, '').replace(/^http/i, 'ws') + '/ws';
+  const dev = deviceId();
+  let ws = null, open = false, snap = null, retry = 0, pingT = null, local = null;
+  const queue = [];
+  const stateSubs = new Set(), tallySubs = new Set(), mineSubs = new Set(), connSubs = new Set();
+  const counts2tally = (q, arr) => {
+    const counts = Q[q].options.map((_, i) => (arr && arr[i]) | 0);
+    return { counts, total: counts.reduce((a, b) => a + b, 0) };
+  };
+  const mineFor = q => {
+    // keep the phone's own tap on screen until the server has caught up
+    if(local && local.q === q && Date.now() - local.ts < 4000) return local.opt;
+    return snap && snap.state.current === q ? snap.mine : null;
+  };
+  const send = m => {
+    const str = JSON.stringify(m);
+    if(open){ try{ ws.send(str); return; }catch(e){} }
+    queue.push(str);
+  };
+  const setOpen = v => { open = v; connSubs.forEach(cb => cb(v)); };
+  const schedule = () => setTimeout(connect, Math.min(8000, 400 * Math.pow(2, retry++)));
+  function connect(){
+    if(ws && ws.readyState <= 1) return;
+    try{ ws = new WebSocket(wsUrl); }catch(e){ schedule(); return; }
+    ws.onopen = () => {
+      retry = 0; setOpen(true);
+      ws.send(JSON.stringify({ t:'hello', dev }));
+      while(queue.length) ws.send(queue.shift());
+      clearInterval(pingT);
+      pingT = setInterval(() => { if(open){ try{ ws.send('{"t":"ping"}'); }catch(e){} } }, 25000);
+    };
+    ws.onmessage = e => {
+      let m; try{ m = JSON.parse(e.data); }catch(_){ return; }
+      if(m.t !== 'snap') return;
+      snap = m;
+      stateSubs.forEach(cb => cb({ ...m.state }));
+      tallySubs.forEach(x => { if(x.q === m.tally.q) x.cb(counts2tally(x.q, m.tally.counts)); });
+      mineSubs.forEach(x => x.cb(mineFor(x.q)));
+    };
+    ws.onclose = () => { clearInterval(pingT); if(open) setOpen(false); schedule(); };
+    ws.onerror = () => { try{ ws.close(); }catch(_){} };
+  }
+  document.addEventListener('visibilitychange', () => { if(!document.hidden && !open){ retry = 0; connect(); } });
+  connect();
+  const sub = (set, x, now) => { set.add(x); if(now) setTimeout(now); return () => set.delete(x); };
   return {
     demo: false,
-    onState(cb){ return listen('state', v => cb({ current:0, reveal:true, ...(v || {}) })); },
-    onVotes(q, cb){ return listen('votes/' + q, v => cb(v || {})); },
-    onMyVote(q, dev, cb){ return listen('votes/' + q + '/' + dev, v => cb(v ?? null)); },
-    setState(p){ return db.ref('state').update(p); },
-    vote(q, dev, opt){ return db.ref('votes/' + q + '/' + dev).set(opt); },
-    reset(q){ return db.ref('votes/' + q).remove(); },
+    onState(cb){ return sub(stateSubs, cb, snap && (() => cb({ ...snap.state }))); },
+    onTally(q, cb){ return sub(tallySubs, { q, cb }, snap && snap.tally.q === q && (() => cb(counts2tally(q, snap.tally.counts)))); },
+    onMyVote(q, _dev, cb){ return sub(mineSubs, { q, cb }, () => cb(mineFor(q))); },
+    onConn(cb){ return sub(connSubs, cb, () => cb(open)); },
+    setState(p){ send({ t:'state', patch:p }); return Promise.resolve(); },
+    vote(q, _dev, opt){ local = { q, opt, ts: Date.now() }; send({ t:'vote', q, opt }); return Promise.resolve(); },
+    reset(q){ send({ t:'reset', q }); return Promise.resolve(); },
     simulate: null
   };
 }
@@ -362,10 +396,10 @@ function viewScreen(){
     $('#qr').innerHTML = `<svg viewBox="-2 -2 ${n + 4} ${n + 4}" role="img" aria-label="投票頁 QR Code" shape-rendering="crispEdges"><rect x="-2" y="-2" width="${n + 4}" height="${n + 4}" fill="var(--qr-bg)"/><path d="${d}" fill="var(--ink)"/></svg>`;
   }catch(e){ $('#qr').textContent = voteUrl(); }
 
-  let cur = -1, state = { current:0, reveal:true }, votes = {}, unsubV = null;
+  let cur = -1, state = { current:0, reveal:true }, tl = null, unsubV = null;
   const paint = () => {
     if(cur < 0) return;
-    const { counts, total } = tally(cur, votes);
+    const { counts, total } = tl || tally(cur, {});
     updateBars($('#bars'), counts, total, state.reveal);
     tween($('#total'), total, v => String(v));
     $('#status').innerHTML = state.reveal ? '<span class="dot"></span>即時統計中' : '<span class="dot"></span>投票中 · 結果稍後揭曉';
@@ -374,14 +408,14 @@ function viewScreen(){
     state = s;
     const q = clampQ(s.current);
     if(q !== cur){
-      cur = q; votes = {};
+      cur = q; tl = null;
       $('#sq').textContent = Q[q].q;
       $('#sqno').innerHTML = `第 <b>${q + 1}</b> / ${Q.length} 題`;
       buildBars($('#bars'), q);
       $('#total').dataset.v = 0;
       const box = $('#sqbox'); box.classList.remove('enter'); void box.offsetWidth; box.classList.add('enter');
       unsubV && unsubV();
-      unsubV = api.onVotes(q, v => { votes = v; paint(); });
+      unsubV = api.onTally(q, t => { tl = t; paint(); });
     }
     paint();
   });
@@ -483,10 +517,10 @@ function viewAdmin(){
     </div>
   </div>`;
 
-  let cur = -1, state = { current:0, reveal:true }, votes = {}, unsubV = null, armTimer = null;
+  let cur = -1, state = { current:0, reveal:true }, tl = null, unsubV = null, armTimer = null;
   const paint = () => {
     if(cur < 0) return;
-    const { counts, total } = tally(cur, votes);
+    const { counts, total } = tl || tally(cur, {});
     updateBars($('#abars'), counts, total, true);
     $('#atotal').textContent = total;
     $('#reveal').textContent = state.reveal ? '🙈 大螢幕顯示結果中 · 點此隱藏' : '🎉 揭曉結果！';
@@ -511,12 +545,12 @@ function viewAdmin(){
     state = s;
     const q = clampQ(s.current);
     if(q !== cur){
-      cur = q; votes = {}; disarm();
+      cur = q; tl = null; disarm();
       $('#aqno').innerHTML = `第 <b>${q + 1}</b> / ${Q.length} 題 · 大螢幕目前顯示`;
       $('#aq').textContent = Q[q].q;
       buildBars($('#abars'), q);
       unsubV && unsubV();
-      unsubV = api.onVotes(q, v => { votes = v; paint(); });
+      unsubV = api.onTally(q, t => { tl = t; paint(); });
     }
     paint();
   });
@@ -536,8 +570,8 @@ function viewLanding(){
       <a href="#admin"><b>主持人控制台</b><span>切換題目、隱藏或揭曉結果</span></a>
     </nav>
     ${api.demo
-      ? `<p class="note">現在是示範模式：資料只存在這台電腦的瀏覽器裡。在同一個瀏覽器開兩個分頁，一個開「大螢幕」、一個開「主持人控制台」，按「模擬 10 位來賓投票」就能看到長條圖即時長出來。正式使用前，照說明填好 Firebase 設定即可讓所有人的手機連線。</p>`
-      : `<p class="note">已連線，所有裝置會即時同步。</p>`}
+      ? `<p class="note">現在是示範模式：資料只存在這台電腦的瀏覽器裡。在同一個瀏覽器開兩個分頁，一個開「大螢幕」、一個開「主持人控制台」，按「模擬 10 位來賓投票」就能看到長條圖即時長出來。正式使用前，照說明部署 Cloudflare 即時伺服器並填入網址，所有人的手機就會連線。</p>`
+      : `<p class="note">已連上即時伺服器，所有裝置會即時同步。</p>`}
   </div>`;
   return null;
 }
@@ -554,13 +588,22 @@ function route(){
 }
 
 (async function init(){
-  try{
-    api = CONFIG.firebase && CONFIG.firebase.apiKey ? await makeFirebaseBackend(CONFIG.firebase) : makeDemoBackend();
-  }catch(e){
-    app.innerHTML = `<div class="fatal"><h2>連不上 Firebase</h2><p>請檢查 CONFIG.firebase 的設定是否正確、網路是否正常，然後重新整理。</p></div>`;
-    return;
+  api = CONFIG.realtimeUrl ? makeCloudflareBackend(CONFIG.realtimeUrl) : makeDemoBackend();
+  const pill = document.createElement('div');
+  pill.className = 'demo-pill';
+  pill.setAttribute('aria-live', 'polite');
+  document.body.appendChild(pill);
+  if(api.demo){ pill.textContent = '示範模式'; }
+  else {
+    pill.hidden = true;
+    let t = null;
+    api.onConn(ok => {
+      clearTimeout(t);
+      if(ok){ pill.hidden = true; return; }
+      // short blips are normal on phones; only show the notice if it lasts
+      t = setTimeout(() => { pill.hidden = false; pill.textContent = '連線中…'; }, 1500);
+    });
   }
-  if(api.demo){ const p = document.createElement('div'); p.className = 'demo-pill'; p.textContent = '示範模式'; document.body.appendChild(p); }
   window.addEventListener('hashchange', route);
   route();
 })();

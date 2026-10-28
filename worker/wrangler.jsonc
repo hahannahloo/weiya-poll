@@ -1,0 +1,9 @@
+{
+  "name": "weiya-poll-api",
+  "main": "src/index.js",
+  "compatibility_date": "2025-09-01",
+  "durable_objects": {
+    "bindings": [{ "name": "POLL", "class_name": "Poll" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Poll"] }]
+}
