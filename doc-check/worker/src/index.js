@@ -332,7 +332,7 @@ export default {
         } catch (e) {
           throw new UserError(e.message);
         }
-        return json({ unit: r.unit, version: r.version, draft: r.version === 0 && r.unit === "總公司", documents: checklistOf(r.text) });
+        return json({ unit: r.unit, version: r.version, documents: checklistOf(r.text) });
       }
 
       // 檢核紀錄：一般使用者只看得到自己的，管理者看得到全部（可用 ?user= 篩選）

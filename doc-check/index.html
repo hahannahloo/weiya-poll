@@ -292,7 +292,6 @@ table.list td.nowrap { white-space: nowrap; }
     </label>
     <details open style="margin:12px 0 10px"><summary class="muted" style="font-weight:600" id="checklistTitle">上傳清單</summary>
       <ol class="checklist" id="checklist"></ol>
-      <div class="demo-note" id="checklistWarn" hidden style="margin-top:8px"></div>
     </details>
     <label class="drop" id="drop">
       <input type="file" id="fileInput" multiple
@@ -645,8 +644,6 @@ $("checkBtn").addEventListener("click", async () => {
 const DEMO_CHECKLIST = ["任用意見表", "新進員工面談紀錄表", "履歷資料表（不是人事資料表）", "最高學歷畢業證書影本（已畢業者）", "任用效益評估", "徵信（證交所聯合徵信資料）", "一類票查"];
 async function loadChecklist() {
   const unit = $("unit").value;
-  const warn = $("checklistWarn");
-  warn.hidden = true;
   if (!unit) {
     $("checklistTitle").textContent = "上傳清單";
     $("checklist").innerHTML = '<li style="list-style:none;margin-left:-1.4em">請先選擇送件單位，這裡會列出需要上傳的文件。</li>';
@@ -655,7 +652,7 @@ async function loadChecklist() {
   $("checklistTitle").textContent = `上傳清單：${unit}任用必備文件`;
   if (!CONFIG.apiUrl) {
     $("checklist").innerHTML = unit === "分公司" ? DEMO_CHECKLIST.map((t) => `<li>${esc(t)}</li>`).join("")
-      : '<li style="list-style:none;margin-left:-1.4em">示範模式沒有總公司清單。</li>';
+      : DEMO_CHECKLIST.slice(0, 4).map((t) => `<li>${esc(t)}</li>`).join("");
     return;
   }
   if (!me) return;
@@ -665,10 +662,6 @@ async function loadChecklist() {
     $("checklist").innerHTML = c.documents.length
       ? c.documents.map((d) => `<li value="${esc(d.no)}" title="${esc(d.detail)}">${esc(d.title)}</li>`).join("")
       : '<li style="list-style:none;margin-left:-1.4em">規則裡沒有列出文件清單，請洽管理者。</li>';
-    if (c.draft) {
-      warn.textContent = "⚠ 總公司的必備文件與規則還沒建立，目前暫時沿用分公司的清單與規則，檢核結果僅供參考。請管理者上傳總公司範例更新。";
-      warn.hidden = false;
-    }
   } catch (err) {
     $("checklist").innerHTML = `<li style="list-style:none;margin-left:-1.4em">${esc(err.message)}</li>`;
   }
