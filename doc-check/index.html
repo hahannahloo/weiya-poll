@@ -165,6 +165,17 @@ details summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
   </section>
 
   <div id="result"></div>
+
+  <section class="card no-print" id="calCard">
+    <h2>📅 國定假日行事曆</h2>
+    <p class="muted" style="margin:0">任用意見表的報到日期必須是每週或每月的第一個工作日，系統依這裡的行事曆計算。請上傳人事行政總處公告的行事曆（PDF、圖片、Excel、CSV 都可以），每年一次；同一年重新上傳會覆蓋舊的。</p>
+    <div id="calList" style="margin-top:10px"></div>
+    <label class="btn ghost" style="margin-top:10px" id="calBtn">
+      <input type="file" id="calInput" multiple hidden accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,.xlsx,.xls,.csv,.txt,application/pdf,image/*">
+      上傳行事曆
+    </label>
+    <div class="status" id="calMsg" style="text-align:left"></div>
+  </section>
 </div>
 
 <script>
@@ -480,6 +491,70 @@ const DEMO_RESULT = {
   ],
 };
 
+// ===== 國定假日行事曆 =====
+function calYearHtml(y, open) {
+  const list = (arr) => arr.map((h) => `${h.date.slice(5).replace("-", "/")} ${esc(h.name)}`).join("、") || "無";
+  return `<details ${open ? "open" : ""} style="border-top:1px solid var(--line);padding:6px 0">
+    <summary>${y.year} 年（民國 ${y.year - 1911} 年）：平日放假 ${y.holidays.length} 天、補班 ${y.workdays.length} 天</summary>
+    <div class="muted">平日放假：${list(y.holidays)}</div>
+    <div class="muted">週末補班：${list(y.workdays)}</div>
+    <div class="muted">來源：${esc(y.source)} · 更新：${new Date(y.updated).toLocaleString("zh-TW")}</div>
+  </details>`;
+}
+
+async function loadCalendar() {
+  if (!CONFIG.apiUrl) {
+    $("calList").innerHTML = '<p class="muted">連上檢核伺服器後才能上傳行事曆。</p>';
+    $("calBtn").hidden = true;
+    return;
+  }
+  $("calBtn").hidden = false;
+  try {
+    const res = await fetch(CONFIG.apiUrl.replace(/\/$/, "") + "/calendar");
+    const { years } = await res.json();
+    $("calList").innerHTML = years.length
+      ? years.map((y) => calYearHtml(y, false)).join("")
+      : '<p class="muted">⚠ 還沒有上傳任何年度的行事曆，報到日期只會排除週末。</p>';
+  } catch {
+    $("calList").innerHTML = '<p class="muted">讀取行事曆失敗。</p>';
+  }
+}
+
+$("calInput").addEventListener("change", async (e) => {
+  const list = [...e.target.files];
+  e.target.value = "";
+  if (!list.length) return;
+  const msg = $("calMsg");
+  msg.textContent = "正在讀取行事曆，約需 1 分鐘…";
+  $("calBtn").hidden = true;
+  try {
+    const files = [];
+    for (const f of list) {
+      const out = await convert(f);
+      files.push({ name: f.name, kind: out.kind, media_type: out.media_type, data: out.data });
+    }
+    const code = $("accessCode").value.trim();
+    store.set("docCheckCode", code);
+    const res = await fetch(CONFIG.apiUrl.replace(/\/$/, "") + "/calendar", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-access-code": code },
+      body: JSON.stringify({ files }),
+    });
+    const data = await res.json().catch(() => ({ error: `伺服器回應異常（${res.status}）` }));
+    if (!res.ok || data.error) throw new Error(data.error || `伺服器錯誤（${res.status}）`);
+    msg.innerHTML = `✅ 已更新 ${data.saved.map((y) => y.year + " 年").join("、")}，請核對下面的日期是否正確：`
+      + data.saved.map((y) => calYearHtml(y, true)).join("")
+      + (data.notes ? `<p class="muted">AI 備註：${esc(data.notes)}</p>` : "");
+    loadCalendar();
+  } catch (err) {
+    msg.textContent = "上傳失敗：" + (err.message === "Failed to fetch" ? "連不到檢核伺服器" : err.message)
+      + "（需要先在上方輸入存取密碼）";
+  } finally {
+    $("calBtn").hidden = false;
+  }
+});
+
+loadCalendar();
 renderFiles();
 </script>
 </body>

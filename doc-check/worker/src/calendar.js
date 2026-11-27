@@ -18,11 +18,12 @@ function todayInTaipei(now) {
 }
 
 // 回傳文字表格，放進給 AI 的訊息裡
-export function reportDateTable(holidays, now = new Date(), daysBefore = 45, daysAfter = 200) {
+// holidays：放假日（Set of YYYY-MM-DD）；workdays：週末補行上班日；coveredYears：已上傳行事曆的年份
+export function reportDateTable({ holidays, workdays = new Set(), coveredYears = new Set() }, now = new Date(), daysBefore = 45, daysAfter = 200) {
   const today = todayInTaipei(now);
   const start = new Date(today.getTime() - daysBefore * DAY);
   const end = new Date(today.getTime() + daysAfter * DAY);
-  const isWorkday = (d) => d.getUTCDay() % 6 !== 0 && !holidays.has(iso(d));
+  const isWorkday = (d) => workdays.has(iso(d)) || (d.getUTCDay() % 6 !== 0 && !holidays.has(iso(d)));
 
   const firstOfWeek = new Map(); // 週一的日期 -> 該週第一個工作日
   const firstOfMonth = new Map(); // YYYY-MM -> 該月第一個工作日
@@ -53,5 +54,10 @@ export function reportDateTable(holidays, now = new Date(), daysBefore = 45, day
     if (!byMonth.has(key)) byMonth.set(key, []);
     byMonth.get(key).push(`${m}/${day}(${WEEKDAY[d.getUTCDay()]}${[...valid.get(k)].includes("月初") ? "，月初" : ""})`);
   });
-  return [...byMonth].map(([k, v]) => `${k}：${v.join("、")}`).join("\n");
+  const table = [...byMonth].map(([k, v]) => `${k}：${v.join("、")}`).join("\n");
+  const missing = [];
+  for (let y = start.getUTCFullYear(); y <= end.getUTCFullYear(); y++) if (!coveredYears.has(y)) missing.push(y);
+  return missing.length
+    ? table + `\n注意：${missing.join("、")} 年的人事行政總處行事曆尚未上傳，這些年份只排除了週末，國定假日可能不完整，相關報到日期請列為 warn。`
+    : table;
 }

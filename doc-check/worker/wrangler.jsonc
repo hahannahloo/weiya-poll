@@ -4,5 +4,9 @@
   "compatibility_date": "2025-09-01",
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
+  "durable_objects": {
+    "bindings": [{ "name": "CAL", "class_name": "CalendarStore" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["CalendarStore"] }],
   "rules": [{ "type": "Text", "globs": ["**/*.md"], "fallthrough": true }]
 }
