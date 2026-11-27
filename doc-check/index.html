@@ -155,6 +155,7 @@ table.list td.nowrap { white-space: nowrap; }
     <div class="userbar no-print" id="userBar" hidden>
       <span class="who" id="whoAmI"></span>
       <button class="linkbtn" data-go="check" id="navCheck">檢核</button>
+      <button class="linkbtn" data-go="history" id="navHistory">紀錄</button>
       <button class="linkbtn" data-go="admin" id="navAdmin" hidden>管理</button>
       <button class="linkbtn" data-go="password" id="navPw">改密碼</button>
       <button class="linkbtn" id="logoutBtn">登出</button>
@@ -170,8 +171,41 @@ table.list td.nowrap { white-space: nowrap; }
       <button class="btn block" type="submit" id="loginBtn">登入</button>
     </form>
     <div class="error" id="loginErr" hidden></div>
-    <p class="muted" style="margin-top:12px">沒有帳號或忘記密碼，請洽管理者。</p>
+    <p class="muted" style="margin-top:12px">還沒有帳號？<button class="linkbtn" type="button" id="showRegister">註冊新帳號</button>　忘記密碼請洽管理者。</p>
   </section>
+
+  <!-- 註冊 -->
+  <section class="card" id="registerView" hidden>
+    <h2>註冊新帳號</h2>
+    <form id="regForm">
+      <label class="field">帳號（英文或數字，建議用員工編號）<input type="text" id="regUser" autocomplete="username" autocapitalize="off" required></label>
+      <label class="field">姓名<input type="text" id="regName" maxlength="30" required></label>
+      <label class="field">密碼（至少 8 個字元）<input type="password" id="regPw" autocomplete="new-password" minlength="8" required></label>
+      <label class="field">再輸入一次密碼<input type="password" id="regPw2" autocomplete="new-password" minlength="8" required></label>
+      <label class="field">註冊碼（請向管理者索取）<input type="text" id="regCode" autocapitalize="off" required></label>
+      <button class="btn block" type="submit" id="regBtn">註冊並登入</button>
+    </form>
+    <div class="error" id="regErr" hidden></div>
+    <p class="muted" style="margin-top:12px">已經有帳號？<button class="linkbtn" type="button" id="showLogin">回到登入</button></p>
+  </section>
+
+  <!-- 檢核紀錄列表 -->
+  <section class="card" id="historyView" hidden>
+    <h2 id="historyTitle">我的紀錄</h2>
+    <form class="row" id="historyFilter" hidden style="align-items:flex-end">
+      <label class="field" style="flex:1 1 160px;margin-top:0">只看某個帳號（留空 = 全部）<input type="text" id="historyUser" autocapitalize="off"></label>
+      <button class="btn ghost" type="submit" style="flex:0 0 auto">篩選</button>
+    </form>
+    <div id="historyList" style="margin-top:6px"></div>
+    <button class="btn ghost block" id="historyMore" hidden>載入更多</button>
+  </section>
+
+  <!-- 單筆紀錄 -->
+  <div id="recordView" hidden>
+    <div class="row no-print" style="margin-top:16px"><button class="btn ghost" id="recordBack" type="button" style="flex:0 0 auto">← 回到紀錄</button></div>
+    <section class="card no-print" id="recordMeta"></section>
+    <div id="recordResult"></div>
+  </div>
 
   <!-- 改密碼 -->
   <section class="card" id="passwordView" hidden>
@@ -221,13 +255,24 @@ table.list td.nowrap { white-space: nowrap; }
   <!-- 管理（只有管理者看得到） -->
   <div id="adminView" hidden>
   <section class="card">
+    <h2>🔑 註冊碼</h2>
+    <p class="muted" style="margin:0">同仁註冊帳號時要輸入這組註冊碼，沒有註冊碼的人無法使用（避免外人亂用、花費 API 費用）。要停止開放註冊，把註冊碼清空後儲存即可。更換註冊碼不影響已註冊的帳號。</p>
+    <form class="row" id="codeForm" style="align-items:flex-end;margin-top:4px">
+      <label class="field" style="flex:1 1 180px">目前的註冊碼<input type="text" id="signupCode" autocapitalize="off" placeholder="尚未設定（不開放註冊）"></label>
+      <button class="btn" type="submit" style="flex:0 0 auto">儲存</button>
+    </form>
+    <div class="ok-msg" id="codeOk" hidden></div>
+    <div class="error" id="codeErr" hidden></div>
+  </section>
+
+  <section class="card">
     <h2>👥 帳號管理</h2>
     <form id="userForm">
       <div class="form-grid">
         <label class="field">帳號（英數字，如員編）<input type="text" id="uName" autocapitalize="off" required></label>
         <label class="field">姓名<input type="text" id="uDisplay" maxlength="30" required></label>
         <label class="field">權限
-          <select id="uRole"><option value="user">一般使用者（只能檢核）</option><option value="admin">管理者（可管理帳號、行事曆、看紀錄）</option></select>
+          <select id="uRole"><option value="user">使用者（檢核、看自己的紀錄）</option><option value="admin">管理者（看全部紀錄、管理帳號與行事曆）</option></select>
         </label>
         <label class="field" id="uPwLabel">密碼（至少 8 個字元）<input type="text" id="uPw" autocomplete="off"></label>
       </div>
@@ -240,7 +285,7 @@ table.list td.nowrap { white-space: nowrap; }
     <div class="error" id="uErr" hidden></div>
     <div class="ok-msg" id="uOk" hidden></div>
     <div id="userTable" style="margin-top:10px"></div>
-    <p class="muted">內建帳號 <b>admin</b> 的密碼在 Cloudflare 的 ADMIN_PASSWORD 設定，不會列在這裡。</p>
+    <p class="muted">同仁可以用註冊碼自行註冊，也可以由管理者在這裡直接建立。要讓某人成為管理者，按「編輯」把權限改成管理者。內建帳號 <b>admin</b> 的密碼在 Cloudflare 的 ADMIN_PASSWORD 設定，不會列在這裡。</p>
   </section>
 
   <section class="card no-print" id="calCard">
@@ -452,6 +497,9 @@ $("checkBtn").addEventListener("click", async () => {
     }
     renderResult(result, !CONFIG.apiUrl);
     $("status").textContent = "";
+    if (result.record_id) {
+      $("result").insertAdjacentHTML("afterbegin", `<div class="ok-msg no-print">✓ 已存到「紀錄」，之後可以隨時回來查看。</div>`);
+    }
     $("result").scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (e) {
     $("error").textContent = "檢核失敗：" + (e.message === "Failed to fetch" ? "連不到檢核伺服器，請檢查網路或伺服器網址" : e.message);
@@ -498,7 +546,7 @@ function reportText(r) {
   return lines.join("\n").trim();
 }
 
-function renderResult(r, isDemo) {
+function renderResult(r, isDemo, target = $("result"), when = new Date()) {
   const by = (s) => r.items.filter((i) => i.status === s);
   const counts = ["fail", "warn", "pass", "na"].map((s) => `<span class="chip ${s}">${LABEL[s]} ${by(s).length}</span>`).join("");
   const docs = r.documents.map((d) => `<div class="doc ${d.found ? "" : "missing"}">
@@ -511,17 +559,17 @@ function renderResult(r, isDemo) {
       ? `<section class="card"><h2>${title}（${list.length}）</h2>${body}</section>`
       : `<section class="card"><details><summary>${title}（${list.length}）</summary>${body}</details></section>`;
   };
-  $("result").innerHTML = `
+  target.innerHTML = `
     ${isDemo ? '<div class="demo-note no-print" style="font-size:1rem"><b>⚠ 以下是固定的範例結果，不是你上傳檔案的檢核。</b>還沒有連上檢核伺服器，你上傳的檔案沒有被檢查。</div>' : ""}
     <div class="banner ${esc(r.overall)}">
       <div class="big">${isDemo ? "【範例】" : ""}${OVERALL[r.overall] || esc(r.overall)}</div>
-      <div class="who">應徵者：${esc(r.applicant_name)}　·　檢核時間：${new Date().toLocaleString("zh-TW")}</div>
+      <div class="who">應徵者：${esc(r.applicant_name)}　·　檢核時間：${new Date(when).toLocaleString("zh-TW")}</div>
       <div class="line">${esc(r.headline)}</div>
       <div class="counts">${counts}</div>
     </div>
     <div class="row no-print" style="margin-top:12px">
-      <button class="btn ghost" id="copyBtn">📋 複製不通過說明</button>
-      <button class="btn ghost" id="printBtn">🖨️ 下載報告 (PDF)</button>
+      <button class="btn ghost copy-btn">📋 複製不通過說明</button>
+      <button class="btn ghost print-btn">🖨️ 下載報告 (PDF)</button>
     </div>
     <section class="card"><h2>文件是否齊全</h2><div class="docs">${docs}</div></section>
     ${section("fail", "❌ 不通過（必須修正）", true)}
@@ -530,14 +578,15 @@ function renderResult(r, isDemo) {
     ${section("na", "不適用的項目", false)}
     <p class="muted">AI 檢核結果僅供參考，送件前請承辦人再次確認。${r.usage ? `（本次用量：輸入 ${r.usage.input_tokens.toLocaleString()}、輸出 ${r.usage.output_tokens.toLocaleString()} tokens）` : ""}</p>`;
 
-  $("copyBtn").onclick = async () => {
+  const copyBtn = target.querySelector(".copy-btn");
+  copyBtn.onclick = async () => {
     const text = reportText(r);
-    try { await navigator.clipboard.writeText(text); $("copyBtn").textContent = "✓ 已複製"; }
+    try { await navigator.clipboard.writeText(text); copyBtn.textContent = "✓ 已複製"; }
     catch { prompt("請手動複製：", text); }
-    setTimeout(() => ($("copyBtn").textContent = "📋 複製不通過說明"), 2000);
+    setTimeout(() => (copyBtn.textContent = "📋 複製不通過說明"), 2000);
   };
-  $("printBtn").onclick = () => {
-    document.querySelectorAll("#result details").forEach((d) => (d.open = true));
+  target.querySelector(".print-btn").onclick = () => {
+    target.querySelectorAll("details").forEach((d) => (d.open = true));
     window.print();
   };
 }
@@ -636,11 +685,26 @@ async function api(path, body) {
   if (res.status === 401 && path !== "/login" && path !== "/password") {
     store.set(TOKEN_KEY, "");
     me = null;
+    clearWorkspace();
     route();
     throw new Error("登入已過期，請重新登入");
   }
   if (!res.ok || data.error) throw new Error(data.error || `伺服器錯誤（${res.status}）`);
   return data;
+}
+
+// 換人登入或登出時，清掉畫面上前一個人的檔案和結果
+function clearWorkspace() {
+  items.length = 0;
+  $("note").value = "";
+  $("unit").value = "";
+  $("result").innerHTML = "";
+  $("recordMeta").innerHTML = "";
+  $("recordResult").innerHTML = "";
+  $("historyList").innerHTML = "";
+  $("historyUser").value = "";
+  showError("error", "");
+  renderFiles();
 }
 
 function showError(id, msg) {
@@ -650,19 +714,25 @@ function showError(id, msg) {
 
 // 依登入狀態與網址 #admin / #password 顯示畫面
 function route() {
-  const views = { login: "loginView", check: "checkView", admin: "adminView", password: "passwordView" };
+  const views = { login: "loginView", register: "registerView", check: "checkView", history: "historyView", record: "recordView", admin: "adminView", password: "passwordView" };
+  const h = location.hash;
   let view = "check";
-  if (CONFIG.apiUrl && !me) view = "login";
-  else if (location.hash === "#admin" && me?.role === "admin") view = "admin";
-  else if (location.hash === "#password" && me) view = "password";
+  if (CONFIG.apiUrl && !me) view = h === "#register" ? "register" : "login";
+  else if (h === "#admin" && me?.role === "admin") view = "admin";
+  else if (h === "#password" && me) view = "password";
+  else if (h === "#history" && me) view = "history";
+  else if (h.startsWith("#rec-") && me) view = "record";
   for (const [k, id] of Object.entries(views)) $(id).hidden = k !== view;
   $("userBar").hidden = !me;
   if (me) {
     $("whoAmI").innerHTML = `<b>${esc(me.name)}</b>（${esc(me.roleName)}）`;
     $("navAdmin").hidden = me.role !== "admin";
-    ["navCheck", "navAdmin", "navPw"].forEach((id) => $(id).classList.toggle("on", $(id).dataset.go === view));
+    ["navCheck", "navHistory", "navAdmin", "navPw"].forEach((id) => $(id).classList.toggle("on", $(id).dataset.go === view || (id === "navHistory" && view === "record")));
+    $("navHistory").textContent = me.role === "admin" ? "全部紀錄" : "我的紀錄";
   }
-  if (view === "admin") { loadUsers(); loadCalendar(); loadLogs(); }
+  if (view === "admin") { loadUsers(); loadCalendar(); loadLogs(); loadSettings(); }
+  if (view === "history") loadHistory(true);
+  if (view === "record") loadRecord(h.slice(5));
   if (view === "login") setTimeout(() => $("loginUser").focus(), 0);
 }
 
@@ -681,6 +751,7 @@ $("loginForm").addEventListener("submit", async (e) => {
   try {
     const data = await api("/login", { username: $("loginUser").value.trim(), password: $("loginPw").value });
     store.set(TOKEN_KEY, data.token);
+    clearWorkspace();
     me = data.user;
     $("loginPw").value = "";
     route();
@@ -695,6 +766,7 @@ $("logoutBtn").addEventListener("click", async () => {
   try { await api("/logout", {}); } catch {}
   store.set(TOKEN_KEY, "");
   me = null;
+  clearWorkspace();
   history.replaceState(null, "", location.pathname + location.search);
   route();
 });
@@ -708,11 +780,157 @@ $("pwForm").addEventListener("submit", async (e) => {
     ["pwOld", "pwNew", "pwNew2"].forEach((id) => ($(id).value = ""));
     store.set(TOKEN_KEY, "");
     me = null;
+    clearWorkspace();
     history.replaceState(null, "", location.pathname + location.search);
     route();
     showError("loginErr", "密碼已更新，請用新密碼重新登入。");
   } catch (err) {
     showError("pwErr", err.message);
+  }
+});
+
+$("showRegister").addEventListener("click", () => { location.hash = "register"; });
+$("showLogin").addEventListener("click", () => { history.replaceState(null, "", location.pathname + location.search); route(); });
+
+$("regForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  showError("regErr", "");
+  if ($("regPw").value !== $("regPw2").value) return showError("regErr", "兩次輸入的密碼不一樣");
+  $("regBtn").disabled = true;
+  try {
+    const data = await api("/register", {
+      username: $("regUser").value.trim(), name: $("regName").value.trim(),
+      password: $("regPw").value, code: $("regCode").value.trim(),
+    });
+    store.set(TOKEN_KEY, data.token);
+    clearWorkspace();
+    me = data.user;
+    $("regForm").reset();
+    history.replaceState(null, "", location.pathname + location.search);
+    route();
+  } catch (err) {
+    showError("regErr", err.message);
+  } finally {
+    $("regBtn").disabled = false;
+  }
+});
+
+// ===== 檢核紀錄 =====
+const fmtTime = (t) => new Date(t).toLocaleString("zh-TW", { dateStyle: "short", timeStyle: "short" });
+let historyBefore = null;
+
+async function loadHistory(reset) {
+  const isAdmin = me.role === "admin";
+  $("historyTitle").textContent = isAdmin ? "全部紀錄" : "我的紀錄";
+  $("historyFilter").hidden = !isAdmin;
+  if (reset) { historyBefore = null; $("historyList").innerHTML = '<p class="muted">載入中…</p>'; }
+  try {
+    const q = new URLSearchParams();
+    if (isAdmin && $("historyUser").value.trim()) q.set("user", $("historyUser").value.trim());
+    if (historyBefore) q.set("before", historyBefore);
+    const { records, more } = await api("/records?" + q);
+    const html = records.map((r) => `<a class="urow" href="#rec-${esc(r.id)}" style="color:inherit;text-decoration:none">
+      <div class="info"><b>${esc(r.applicant || (r.overall === "error" ? "（檢核失敗）" : "（未辨識）"))}</b>
+        <div class="meta">${fmtTime(r.time)}${isAdmin ? ` · ${esc(r.name)}（${esc(r.username)}）` : ""} · ${r.fileCount} 個檔案</div></div>
+      <div>${r.overall === "error" ? '<span class="chip na">失敗</span>'
+        : `<span class="chip ${esc(r.overall)}">${LABEL[r.overall] || esc(r.overall)}</span> <span class="meta">不通過 ${r.fail}・需確認 ${r.warn}</span>`}</div></a>`).join("");
+    if (reset) $("historyList").innerHTML = html || '<p class="muted">還沒有任何檢核紀錄。</p>';
+    else $("historyList").insertAdjacentHTML("beforeend", html);
+    historyBefore = records.length ? records[records.length - 1].id : historyBefore;
+    $("historyMore").hidden = !more;
+  } catch (err) {
+    $("historyList").innerHTML = `<p class="error">${esc(err.message)}</p>`;
+  }
+}
+$("historyMore").addEventListener("click", () => loadHistory(false));
+$("historyFilter").addEventListener("submit", (e) => { e.preventDefault(); loadHistory(true); });
+$("recordBack").addEventListener("click", () => { location.hash = "history"; });
+
+function b64Blob(data, type) {
+  const bin = atob(data);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type });
+}
+
+let confirmRecDelete = false;
+async function loadRecord(id) {
+  $("recordMeta").innerHTML = '<p class="muted">載入中…</p>';
+  $("recordResult").innerHTML = "";
+  confirmRecDelete = false;
+  try {
+    const { record: rec } = await api("/records/" + encodeURIComponent(id));
+    const isAdmin = me.role === "admin";
+    $("recordMeta").innerHTML = `<h2>檢核紀錄</h2>
+      <div class="meta muted">${fmtTime(rec.time)} · 上傳者：${esc(rec.name)}（${esc(rec.username)}）${rec.unit ? " · 送件單位：" + esc(rec.unit) : ""}</div>
+      ${rec.note ? `<div class="muted">補充說明：${esc(rec.note)}</div>` : ""}
+      <h2 style="margin-top:14px">上傳的檔案</h2>
+      <div>${rec.files.map((f, i) => `<div class="urow"><div class="info">${esc(f.name)}<div class="meta">${fmtSize(f.size * 0.75)}</div></div>
+        <button class="linkbtn" data-file="${i}">開啟</button></div>
+        <div id="filePreview${i}"></div>`).join("")}</div>
+      ${isAdmin ? '<div class="row" style="margin-top:14px"><button class="btn ghost" id="recDelete" style="color:var(--fail)">刪除這筆紀錄</button></div>' : ""}`;
+    if (rec.result) renderResult(rec.result, false, $("recordResult"), rec.time);
+    else $("recordResult").innerHTML = `<div class="error">這次檢核失敗：${esc(rec.error)}</div>`;
+
+    $("recordMeta").querySelectorAll("[data-file]").forEach((btn) => btn.addEventListener("click", async () => {
+      const i = btn.dataset.file, box = $("filePreview" + i);
+      btn.disabled = true;
+      box.innerHTML = '<p class="muted">讀取中…</p>';
+      try {
+        const { file } = await api(`/records/${encodeURIComponent(rec.id)}/files/${i}`);
+        if (file.kind === "text") {
+          box.innerHTML = `<pre style="white-space:pre-wrap;max-height:300px;overflow:auto;font-size:.8rem">${esc(file.data)}</pre>`;
+        } else {
+          const type = file.kind === "pdf" ? "application/pdf" : file.media_type;
+          const url = URL.createObjectURL(b64Blob(file.data, type));
+          box.innerHTML = file.kind === "image"
+            ? `<a href="${url}" target="_blank" rel="noopener"><img src="${url}" alt="${esc(file.name)}" style="max-width:100%;border:1px solid var(--line);border-radius:8px;margin:6px 0"></a>`
+            : `<p><a href="${url}" target="_blank" rel="noopener">📄 開啟 ${esc(file.name)}</a></p>`;
+        }
+      } catch (err) {
+        box.innerHTML = `<p class="error">${esc(err.message)}</p>`;
+      } finally {
+        btn.disabled = false;
+      }
+    }));
+
+    const del = $("recDelete");
+    if (del) del.addEventListener("click", async () => {
+      if (!confirmRecDelete) {
+        confirmRecDelete = true;
+        del.textContent = "確定要刪除？檔案和結果都會刪除，無法復原（再按一次）";
+        return;
+      }
+      try {
+        await api("/admin/records/delete", { id: rec.id });
+        location.hash = "history";
+      } catch (err) {
+        del.textContent = "刪除失敗：" + err.message;
+      }
+    });
+  } catch (err) {
+    $("recordMeta").innerHTML = `<p class="error">${esc(err.message)}</p>`;
+  }
+}
+
+// ===== 註冊碼 =====
+async function loadSettings() {
+  try {
+    $("signupCode").value = (await api("/admin/settings")).signupCode;
+  } catch (err) {
+    showError("codeErr", err.message);
+  }
+}
+$("codeForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  showError("codeErr", "");
+  $("codeOk").hidden = true;
+  try {
+    const { signupCode } = await api("/admin/settings", { signupCode: $("signupCode").value });
+    $("codeOk").textContent = signupCode ? `已儲存。請把註冊碼「${signupCode}」告訴同仁。` : "已關閉註冊，現在沒有人能自行註冊。";
+    $("codeOk").hidden = false;
+  } catch (err) {
+    showError("codeErr", err.message);
   }
 });
 
@@ -824,6 +1042,7 @@ async function loadLogs() {
         let result = esc(LOG_RESULT[l.overall] || l.overall || "");
         if (l.action === "檢核" && l.overall !== "error") result = `${esc(l.applicant || "")}：<span class="chip ${esc(l.overall)}">${result}</span> 不通過 ${l.fail ?? 0}、需確認 ${l.warn ?? 0}`;
         if (l.error) result += `<div class="muted">${esc(l.error)}</div>`;
+        if (l.record) result += ` <a href="#rec-${esc(l.record)}">查看</a>`;
         return `<tr><td class="nowrap">${new Date(l.time).toLocaleString("zh-TW", { dateStyle: "short", timeStyle: "short" })}</td>
           <td class="nowrap">${esc(l.name)}</td><td class="nowrap">${esc(l.action)}</td><td>${result}</td>
           <td class="muted">${esc((l.files || []).join("、"))}</td></tr>`;

@@ -1,11 +1,12 @@
 // 任用送件檢核伺服器：收到網頁傳來的檔案，交給 Claude 依 rules.md 的標準檢核，回傳結果。
 // 金鑰只存在 Cloudflare（ANTHROPIC_API_KEY），不會出現在網頁上。送件檔案不會被儲存；
-// 會儲存的只有：帳號（密碼已雜湊）、登入憑證、行事曆整理出的放假日、使用紀錄（誰、何時、檔名、結果，不含檔案內容）。
+// 會儲存：帳號（密碼已雜湊）、登入憑證、行事曆整理出的放假日、檢核紀錄（上傳的檔案與結果，作為歷史軌跡）、使用紀錄。
 import Anthropic from "@anthropic-ai/sdk";
 import { DurableObject } from "cloudflare:workers";
 import { SYSTEM_PROMPT, OUTPUT_SCHEMA, HOLIDAYS } from "./rules.js";
 import { reportDateTable } from "./calendar.js";
 import { CALENDAR_PROMPT, CALENDAR_SCHEMA, cleanCalendar } from "./holidays.js";
+import { saveRecord, listRecords, getRecord, getFile, deleteRecord } from "./records.js";
 import { login, currentUser, dropSessions, newPasswordRecord, checkPassword, validUsername, publicUser, ROLES, BUILTIN_ADMIN } from "./auth.js";
 
 const MODEL = "claude-opus-5-5";
@@ -102,14 +103,20 @@ async function askClaude(env, { system, content, schema, maxTokens = 32000 }) {
   return result;
 }
 
+// 把錯誤轉成看得懂的中文訊息
+function explain(e) {
+  if (e instanceof UserError) return [e.message, e.status];
+  if (e instanceof Anthropic.AuthenticationError) return ["API 金鑰無效，請檢查 Cloudflare 設定", 500];
+  if (e instanceof Anthropic.RateLimitError) return ["使用量超過上限，請稍後再試", 429];
+  if (e instanceof Anthropic.BadRequestError) return ["檔案無法處理（可能太大或格式不支援）：" + e.message, 400];
+  if (e instanceof Anthropic.APIError) return [`AI 服務錯誤（${e.status}），請稍後再試`, 502];
+  if (e instanceof SyntaxError) return ["AI 回傳格式異常，請再試一次", 502];
+  return ["處理失敗：" + (e.message || e), 500];
+}
+
 function errorResponse(e) {
-  if (e instanceof UserError) return fail(e.message, e.status);
-  if (e instanceof Anthropic.AuthenticationError) return fail("API 金鑰無效，請檢查 Cloudflare 設定", 500);
-  if (e instanceof Anthropic.RateLimitError) return fail("使用量超過上限，請稍後再試", 429);
-  if (e instanceof Anthropic.BadRequestError) return fail("檔案無法處理（可能太大或格式不支援）：" + e.message, 400);
-  if (e instanceof Anthropic.APIError) return fail(`AI 服務錯誤（${e.status}），請稍後再試`, 502);
-  if (e instanceof SyntaxError) return fail("AI 回傳格式異常，請再試一次", 502);
-  return fail("處理失敗：" + (e.message || e), 500);
+  const [msg, status] = explain(e);
+  return fail(msg, status);
 }
 
 async function readBody(request) {
@@ -154,17 +161,21 @@ async function handleCheck(request, env, db, user) {
     text: `今天日期：${taipeiToday()}。以上是這次的送件，共 ${files.length} 個檔案。請依檢核標準逐條檢核。${unit}${note}\n\n可報到日期表（每週第一個工作日、每月第一個工作日，已排除週末與國定假日；任用意見表的報到日期不在表上即不通過）：\n${reportDateTable(cal)}`,
   });
   const fileNames = files.map((f) => String(f.name || "").slice(0, 100));
+  const keep = { user, files, note: String(body.note || "").slice(0, 2000), unit: body.unit };
   try {
     const result = await askClaude(env, { system: SYSTEM_PROMPT, content, schema: OUTPUT_SCHEMA });
     const count = (s) => result.items.filter((i) => i.status === s).length;
+    const id = await saveRecord(db, { ...keep, result });
     await addLog(db, {
-      username: user.username, name: user.name, action: "檢核", files: fileNames,
+      username: user.username, name: user.name, action: "檢核", files: fileNames, record: id,
       applicant: result.applicant_name, overall: result.overall,
       fail: count("fail"), warn: count("warn"), tokens: result.usage,
     });
-    return json(result);
+    return json({ ...result, record_id: id });
   } catch (e) {
-    await addLog(db, { username: user.username, name: user.name, action: "檢核", files: fileNames, overall: "error", error: String(e.message || e).slice(0, 200) });
+    const msg = explain(e)[0].slice(0, 200);
+    const id = await saveRecord(db, { ...keep, error: msg }).catch(() => null);
+    await addLog(db, { username: user.username, name: user.name, action: "檢核", files: fileNames, record: id, overall: "error", error: msg });
     throw e;
   }
 }
@@ -245,6 +256,27 @@ async function handleChangePassword(request, db, user) {
   return json({ ok: true });
 }
 
+// ===== 自行註冊（需要管理者設定的註冊碼） =====
+async function handleRegister(request, env, db) {
+  const b = await readBody(request);
+  const code = await db.get("setting:signupCode");
+  if (!code) throw new UserError("目前尚未開放註冊，請洽管理者", 403);
+  if (String(b.code || "").trim() !== code) throw new UserError("註冊碼不正確，請向管理者確認", 403);
+  const username = String(b.username || "").trim().toLowerCase();
+  if (!validUsername(username) || username === BUILTIN_ADMIN) throw new UserError("帳號只能用英文、數字、._-，長度 2～32 字");
+  const name = String(b.name || "").trim().slice(0, 30);
+  if (!name) throw new UserError("請填姓名");
+  const err = checkPassword(b.password);
+  if (err) throw new UserError(err);
+  if (await db.get("user:" + username)) throw new UserError("這個帳號已經有人使用，請換一個");
+  await db.put("user:" + username, {
+    username, name, role: "user", active: true, created: new Date().toISOString(), selfRegistered: true,
+    ...(await newPasswordRecord(b.password)),
+  });
+  await addLog(db, { username, name, action: "註冊帳號", overall: username });
+  return json(await login(db, env, username, b.password));
+}
+
 // ===== 路由 =====
 export default {
   async fetch(request, env) {
@@ -269,6 +301,8 @@ export default {
         }
       }
 
+      if (path === "/register" && POST) return await handleRegister(request, env, db);
+
       const user = await currentUser(db, request);
       if (!user) return fail("請先登入", 401);
 
@@ -281,12 +315,44 @@ export default {
       if (path === "/check" && POST) return await handleCheck(request, env, db, user);
       if (path === "/calendar" && GET) return json({ years: (await loadCalendars(db)).years });
 
+      // 檢核紀錄：一般使用者只看得到自己的，管理者看得到全部（可用 ?user= 篩選）
+      if (path === "/records" && GET) {
+        const who = user.role === "admin" ? (url.searchParams.get("user") || "").toLowerCase() : user.username;
+        return json(await listRecords(db, { username: who, before: url.searchParams.get("before") }));
+      }
+      const recMatch = path.match(/^\/records\/([0-9a-z]+)(?:\/files\/(\d+))?$/);
+      if (recMatch && GET) {
+        const rec = await getRecord(db, recMatch[1], user);
+        if (!rec) return fail("找不到這筆紀錄", 404);
+        if (recMatch[2] === undefined) return json({ record: rec });
+        const file = await getFile(db, rec, Number(recMatch[2]));
+        return file ? json({ file }) : fail("找不到這個檔案", 404);
+      }
+
       // 以下只有管理者可以用
       if (user.role !== "admin") return fail("只有管理者可以使用這個功能", 403);
       if (path === "/calendar" && POST) return await handleCalendarUpload(request, env, db, user);
       if (path === "/admin/users" && GET) return json({ users: await listUsers(db) });
       if (path === "/admin/users" && POST) return await handleSaveUser(request, db, user);
       if (path === "/admin/users/delete" && POST) return await handleDeleteUser(request, db, user);
+      if (path === "/admin/records/delete" && POST) {
+        const { id } = await readBody(request);
+        const rec = await getRecord(db, id, user);
+        if (!rec) return fail("找不到這筆紀錄", 404);
+        await deleteRecord(db, rec);
+        await addLog(db, { username: user.username, name: user.name, action: "刪除檢核紀錄", overall: `${rec.name} ${rec.time.slice(0, 10)} ${rec.result?.applicant_name || ""}`, files: rec.files.map((f) => f.name) });
+        return json({ ok: true });
+      }
+      if (path === "/admin/settings" && GET) return json({ signupCode: (await db.get("setting:signupCode")) || "" });
+      if (path === "/admin/settings" && POST) {
+        const { signupCode } = await readBody(request);
+        const code = String(signupCode || "").trim();
+        if (code && code.length < 4) throw new UserError("註冊碼至少 4 個字元");
+        if (code) await db.put("setting:signupCode", code.slice(0, 50));
+        else await db.del("setting:signupCode");
+        await addLog(db, { username: user.username, name: user.name, action: code ? "設定註冊碼" : "關閉註冊", overall: "" });
+        return json({ signupCode: code });
+      }
       if (path === "/admin/logs" && GET) {
         const limit = Math.min(500, Number(url.searchParams.get("limit")) || 200);
         return json({ logs: Object.values(await db.list({ prefix: "log:", reverse: true, limit })) });

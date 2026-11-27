@@ -5,7 +5,7 @@ const ITERATIONS = 10000;
 const SESSION_DAYS = 7;
 const MAX_FAILS = 5;          // 連續輸錯幾次就鎖定
 const LOCK_MINUTES = 15;
-export const ROLES = { admin: "管理者", user: "一般使用者" };
+export const ROLES = { admin: "管理者", user: "使用者" };
 export const BUILTIN_ADMIN = "admin";
 
 const enc = new TextEncoder();
