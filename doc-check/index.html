@@ -266,6 +266,21 @@ table.list td.nowrap { white-space: nowrap; }
   </section>
 
   <section class="card">
+    <h2>🗂️ 資料保存期限</h2>
+    <p class="muted" style="margin:0">超過天數的資料，系統每天凌晨 2 點會自動刪除。留空 = 不自動刪除。每次刪除都會記在使用紀錄裡。</p>
+    <form id="retForm">
+      <div class="form-grid">
+        <label class="field">上傳的檔案保存（天）<input type="number" id="retFile" min="1" max="3650" step="1" inputmode="numeric" placeholder="不自動刪除"></label>
+        <label class="field">檢核結果保存（天）<input type="number" id="retResult" min="1" max="3650" step="1" inputmode="numeric" placeholder="不自動刪除"></label>
+      </div>
+      <p class="muted" style="margin:8px 0 0">・檔案到期：只刪照片、PDF 等原始檔案，檢核結果仍然看得到。<br>・結果到期：整筆紀錄（含檔案）都刪除。<br>・使用紀錄（誰、何時、做了什麼）不會被刪除。</p>
+      <div class="row" style="margin-top:12px"><button class="btn" type="submit" style="flex:0 0 auto">儲存</button></div>
+    </form>
+    <div class="ok-msg" id="retOk" hidden></div>
+    <div class="error" id="retErr" hidden></div>
+  </section>
+
+  <section class="card">
     <h2>👥 帳號管理</h2>
     <form id="userForm">
       <div class="form-grid">
@@ -831,7 +846,7 @@ async function loadHistory(reset) {
     const { records, more } = await api("/records?" + q);
     const html = records.map((r) => `<a class="urow" href="#rec-${esc(r.id)}" style="color:inherit;text-decoration:none">
       <div class="info"><b>${esc(r.applicant || (r.overall === "error" ? "（檢核失敗）" : "（未辨識）"))}</b>
-        <div class="meta">${fmtTime(r.time)}${isAdmin ? ` · ${esc(r.name)}（${esc(r.username)}）` : ""} · ${r.fileCount} 個檔案</div></div>
+        <div class="meta">${fmtTime(r.time)}${isAdmin ? ` · ${esc(r.name)}（${esc(r.username)}）` : ""} · ${r.fileCount} 個檔案${r.filesDeleted ? "（已刪除）" : ""}</div></div>
       <div>${r.overall === "error" ? '<span class="chip na">失敗</span>'
         : `<span class="chip ${esc(r.overall)}">${LABEL[r.overall] || esc(r.overall)}</span> <span class="meta">不通過 ${r.fail}・需確認 ${r.warn}</span>`}</div></a>`).join("");
     if (reset) $("historyList").innerHTML = html || '<p class="muted">還沒有任何檢核紀錄。</p>';
@@ -865,8 +880,9 @@ async function loadRecord(id) {
       <div class="meta muted">${fmtTime(rec.time)} · 上傳者：${esc(rec.name)}（${esc(rec.username)}）${rec.unit ? " · 送件單位：" + esc(rec.unit) : ""}</div>
       ${rec.note ? `<div class="muted">補充說明：${esc(rec.note)}</div>` : ""}
       <h2 style="margin-top:14px">上傳的檔案</h2>
+      ${rec.filesDeleted ? `<p class="muted">檔案已於 ${fmtTime(rec.filesDeleted)} 依資料保存期限刪除，檢核結果仍保留。</p>` : ""}
       <div>${rec.files.map((f, i) => `<div class="urow"><div class="info">${esc(f.name)}<div class="meta">${fmtSize(f.size * 0.75)}</div></div>
-        <button class="linkbtn" data-file="${i}">開啟</button></div>
+        ${rec.filesDeleted ? "" : `<button class="linkbtn" data-file="${i}">開啟</button>`}</div>
         <div id="filePreview${i}"></div>`).join("")}</div>
       ${isAdmin ? '<div class="row" style="margin-top:14px"><button class="btn ghost" id="recDelete" style="color:var(--fail)">刪除這筆紀錄</button></div>' : ""}`;
     if (rec.result) renderResult(rec.result, false, $("recordResult"), rec.time);
@@ -916,7 +932,10 @@ async function loadRecord(id) {
 // ===== 註冊碼 =====
 async function loadSettings() {
   try {
-    $("signupCode").value = (await api("/admin/settings")).signupCode;
+    const st = await api("/admin/settings");
+    $("signupCode").value = st.signupCode;
+    $("retFile").value = st.retention.fileDays || "";
+    $("retResult").value = st.retention.resultDays || "";
   } catch (err) {
     showError("codeErr", err.message);
   }
@@ -931,6 +950,22 @@ $("codeForm").addEventListener("submit", async (e) => {
     $("codeOk").hidden = false;
   } catch (err) {
     showError("codeErr", err.message);
+  }
+});
+
+$("retForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  showError("retErr", "");
+  $("retOk").hidden = true;
+  try {
+    const { retention: r, cleaned } = await api("/admin/retention", { fileDays: $("retFile").value, resultDays: $("retResult").value });
+    const txt = (d) => (d ? `${d} 天` : "不自動刪除");
+    let msg = `已儲存。檔案：${txt(r.fileDays)}；檢核結果：${txt(r.resultDays)}。`;
+    if (cleaned.files || cleaned.records) msg += `剛剛已刪除 ${cleaned.files} 筆的檔案、${cleaned.records} 筆整筆紀錄。`;
+    $("retOk").textContent = msg;
+    $("retOk").hidden = false;
+  } catch (err) {
+    showError("retErr", err.message);
   }
 });
 

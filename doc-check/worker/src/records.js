@@ -8,8 +8,14 @@
 //   file:<id>:<第幾個檔>:<第幾段>  檔案內容（分段存，每段不超過 1MB）
 
 const CHUNK = 1_000_000;
+const DAY = 86400000;
 
-export const newId = () => String(Date.now()).padStart(15, "0") + Math.random().toString(36).slice(2, 6);
+export async function addLog(db, entry) {
+  const key = "log:" + String(Date.now()).padStart(15, "0") + Math.random().toString(36).slice(2, 6);
+  await db.put(key, { time: new Date().toISOString(), ...entry });
+}
+
+export const newId = (t = Date.now()) => String(t).padStart(15, "0") + Math.random().toString(36).slice(2, 6);
 
 function summaryOf(rec) {
   const r = rec.result;
@@ -23,7 +29,8 @@ function summaryOf(rec) {
 }
 
 export async function saveRecord(db, { user, files, note, unit, result, error }) {
-  const id = newId();
+  const now = Date.now();
+  const id = newId(now);
   const meta = [];
   for (let i = 0; i < files.length; i++) {
     const f = files[i];
@@ -33,7 +40,7 @@ export async function saveRecord(db, { user, files, note, unit, result, error })
     meta.push({ name: String(f.name || "").slice(0, 200), kind: f.kind, media_type: f.media_type || "", size: data.length, chunks });
   }
   const rec = {
-    id, time: new Date().toISOString(), username: user.username, name: user.name,
+    id, time: new Date(now).toISOString(), username: user.username, name: user.name,
     note: note || "", unit: unit || "", files: meta, result: result || null,
     error: error ? String(error).slice(0, 300) : "",
   };
@@ -64,17 +71,96 @@ export async function getRecord(db, id, user) {
 
 export async function getFile(db, rec, index) {
   const f = rec.files[index];
-  if (!f) return null;
+  if (!f || rec.filesDeleted) return null;
   let data = "";
   for (let c = 0; c < f.chunks; c++) data += (await db.get(`file:${rec.id}:${index}:${c}`)) || "";
   return { ...f, data };
 }
 
-export async function deleteRecord(db, rec) {
+async function deleteFiles(db, rec) {
+  if (rec.filesDeleted) return;
   for (let i = 0; i < rec.files.length; i++) {
+    for (let c = 0; c < rec.files[i].chunks; c++) await db.del(`file:${rec.id}:${i}:${c}`);
+  }
+}
+
+export async function deleteRecord(db, rec) {
+  if (!rec.filesDeleted) for (let i = 0; i < rec.files.length; i++) {
     for (let c = 0; c < rec.files[i].chunks; c++) await db.del(`file:${rec.id}:${i}:${c}`);
   }
   await db.del("rec:" + rec.id);
   await db.del("sum:" + rec.id);
   await db.del(`usum:${rec.username}:${rec.id}`);
+}
+
+// ===== 資料保存期限 =====
+// settings = { fileDays, resultDays }：0 或空白 = 不自動刪除
+export function checkRetention(fileDays, resultDays) {
+  const n = (v) => (v === "" || v === null || v === undefined ? 0 : Number(v));
+  const f = n(fileDays), r = n(resultDays);
+  for (const v of [f, r]) {
+    if (!Number.isInteger(v) || v < 0 || v > 3650) throw new Error("天數請填 1～3650 的整數，或留空表示不自動刪除");
+  }
+  if (r && (!f || f > r)) throw new Error("檔案的保存天數不能比結果長（結果刪除時，檔案也會一起刪除）");
+  return { fileDays: f, resultDays: r };
+}
+
+// 刪除過期資料：
+//   檔案超過 fileDays 天 → 只刪檔案，保留檢核結果
+//   整筆超過 resultDays 天 → 檔案和結果全部刪除
+// 紀錄 id 開頭是時間，所以從最舊的往新的掃，掃到還沒過期的就停。
+// 「刪檔案」記住上次掃到哪一筆（setting:fileCursor），下次從那裡繼續，不會重複掃已處理過的紀錄。
+export async function cleanupRecords(db, { fileDays, resultDays }, now = Date.now(), batch = 200) {
+  const counts = { files: 0, records: 0 };
+  const cutoff = (days) => "sum:" + String(now - days * DAY).padStart(15, "0");
+
+  if (resultDays) {
+    for (;;) {
+      const list = Object.values(await db.list({ prefix: "sum:", end: cutoff(resultDays), limit: batch }));
+      for (const sum of list) {
+        const rec = await db.get("rec:" + sum.id);
+        if (rec) await deleteRecord(db, rec);
+        else await db.del("sum:" + sum.id);
+        counts.records++;
+      }
+      if (list.length < batch) break;
+    }
+  }
+
+  if (fileDays) {
+    let cursor = (await db.get("setting:fileCursor")) || "";
+    for (;;) {
+      const opts = { prefix: "sum:", end: cutoff(fileDays), limit: batch };
+      if (cursor) opts.start = "sum:" + cursor + "~";
+      const list = Object.values(await db.list(opts));
+      for (const sum of list) {
+        const rec = await db.get("rec:" + sum.id);
+        if (rec && !rec.filesDeleted) {
+          await deleteFiles(db, rec);
+          const when = new Date(now).toISOString();
+          await db.put("rec:" + rec.id, { ...rec, filesDeleted: when });
+          const s = { ...sum, filesDeleted: when };
+          await db.put("sum:" + rec.id, s);
+          await db.put(`usum:${rec.username}:${rec.id}`, s);
+          counts.files++;
+        }
+        cursor = sum.id;
+      }
+      if (list.length) await db.put("setting:fileCursor", cursor);
+      if (list.length < batch) break;
+    }
+  }
+  return counts;
+}
+
+export async function runCleanup(db, now = Date.now()) {
+  const settings = (await db.get("setting:retention")) || { fileDays: 0, resultDays: 0 };
+  const counts = await cleanupRecords(db, settings, now);
+  if (counts.files || counts.records) {
+    await addLog(db, {
+      username: "system", name: "系統", action: "依保存期限自動刪除",
+      overall: `刪除 ${counts.files} 筆的檔案（保留結果）、${counts.records} 筆整筆紀錄`,
+    });
+  }
+  return counts;
 }

@@ -6,7 +6,7 @@ import { DurableObject } from "cloudflare:workers";
 import { SYSTEM_PROMPT, OUTPUT_SCHEMA, HOLIDAYS } from "./rules.js";
 import { reportDateTable } from "./calendar.js";
 import { CALENDAR_PROMPT, CALENDAR_SCHEMA, cleanCalendar } from "./holidays.js";
-import { saveRecord, listRecords, getRecord, getFile, deleteRecord } from "./records.js";
+import { saveRecord, listRecords, getRecord, getFile, deleteRecord, addLog, checkRetention, runCleanup } from "./records.js";
 import { login, currentUser, dropSessions, newPasswordRecord, checkPassword, validUsername, publicUser, ROLES, BUILTIN_ADMIN } from "./auth.js";
 
 const MODEL = "claude-opus-5-5";
@@ -60,6 +60,15 @@ export class Store extends DurableObject {
   async put(key, value) { await this.ctx.storage.put(key, value); }
   async del(key) { await this.ctx.storage.delete(key); }
   async list(options) { return Object.fromEntries(await this.ctx.storage.list(options)); }
+  // 清理過期資料直接在資料庫裡執行，不用來回傳資料
+  async cleanup() {
+    const storage = this.ctx.storage;
+    const db = {
+      get: (k) => storage.get(k), put: (k, v) => storage.put(k, v), del: (k) => storage.delete(k),
+      list: async (o) => Object.fromEntries(await storage.list(o)),
+    };
+    return await runCleanup(db);
+  }
 }
 
 const dbOf = (env) => env.DB.get(env.DB.idFromName("main"));
@@ -140,10 +149,6 @@ function readFiles(body) {
 
 const taipeiToday = () => new Date().toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei" });
 
-async function addLog(db, entry) {
-  const key = "log:" + String(Date.now()).padStart(15, "0") + Math.random().toString(36).slice(2, 6);
-  await db.put(key, { time: new Date().toISOString(), ...entry });
-}
 
 // ===== 檢核送件 =====
 async function handleCheck(request, env, db, user) {
@@ -279,6 +284,11 @@ async function handleRegister(request, env, db) {
 
 // ===== 路由 =====
 export default {
+  // 每天凌晨（台灣時間 2:00）自動依保存期限清理
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(dbOf(env).cleanup());
+  },
+
   async fetch(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
@@ -343,7 +353,26 @@ export default {
         await addLog(db, { username: user.username, name: user.name, action: "刪除檢核紀錄", overall: `${rec.name} ${rec.time.slice(0, 10)} ${rec.result?.applicant_name || ""}`, files: rec.files.map((f) => f.name) });
         return json({ ok: true });
       }
-      if (path === "/admin/settings" && GET) return json({ signupCode: (await db.get("setting:signupCode")) || "" });
+      if (path === "/admin/settings" && GET) {
+        return json({
+          signupCode: (await db.get("setting:signupCode")) || "",
+          retention: (await db.get("setting:retention")) || { fileDays: 0, resultDays: 0 },
+        });
+      }
+      if (path === "/admin/retention" && POST) {
+        const b = await readBody(request);
+        let r;
+        try {
+          r = checkRetention(b.fileDays, b.resultDays);
+        } catch (e) {
+          throw new UserError(e.message);
+        }
+        await db.put("setting:retention", r);
+        const txt = (d) => (d ? `${d} 天` : "不自動刪除");
+        await addLog(db, { username: user.username, name: user.name, action: "設定保存期限", overall: `檔案：${txt(r.fileDays)}；結果：${txt(r.resultDays)}` });
+        const counts = await db.cleanup();
+        return json({ retention: r, cleaned: counts });
+      }
       if (path === "/admin/settings" && POST) {
         const { signupCode } = await readBody(request);
         const code = String(signupCode || "").trim();
