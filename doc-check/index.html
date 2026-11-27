@@ -14,7 +14,7 @@
   --warn: #8c6f3a; --warn-soft: #f2eadb;
   --na: #7f776e; --na-soft: #ebe7e1;
   --shadow: 0 1px 2px rgba(61,57,52,.05), 0 2px 6px rgba(61,57,52,.06);
-  /* 五個步驟的顏色（莫蘭迪色）：傳、審、改、印、送 */
+  /* 五個步驟的顏色（莫蘭迪色）：傳、審、修、印、送 */
   --s1: #9a6f67; --s1-soft: #f0e5e1;
   --s2: #957a4c; --s2-soft: #f1eadc;
   --s3: #7c6b88; --s3-soft: #ebe6ef;
@@ -279,7 +279,7 @@ table.list td.nowrap { white-space: nowrap; }
   <nav class="steps no-print" id="steps" aria-label="送件進度">
     <div class="step"><span class="ch">傳</span><span class="lb">上傳資料</span><span class="cp">依清單上傳您的任用表單與文件檔案。</span></div>
     <div class="step"><span class="ch">審</span><span class="lb">線上審核</span><span class="cp">系統為您快速檢核格式與內容是否齊全。</span></div>
-    <div class="step"><span class="ch">改</span><span class="lb">修正缺漏</span><span class="cp">依審核提示補充或修改錯誤，確保資料 100% 正確。</span></div>
+    <div class="step"><span class="ch">修</span><span class="lb">修正缺漏</span><span class="cp">依審核提示補充或修改錯誤，確保資料 100% 正確。</span></div>
     <div class="step"><span class="ch">印</span><span class="lb">列印結果</span><span class="cp">確認審核通過後，將審核通過文件印出。</span></div>
     <div class="step"><span class="ch">送</span><span class="lb">送出繳交</span><span class="cp">將審核通過的文件及審核結果交回人資，輕鬆完成任用送簽程序！</span></div>
   </nav>
@@ -858,7 +858,7 @@ $("unit").addEventListener("change", () => {
   loadChecklist();
 });
 
-// ===== 五步驟進度：傳 → 審 → 改 → 印 → 送 =====
+// ===== 五步驟進度：傳 → 審 → 修 → 印 → 送 =====
 const STEP_TEXT = [
   "依清單上傳您的任用表單與文件檔案。",
   "系統為您快速檢核格式與內容是否齊全。",
@@ -866,7 +866,7 @@ const STEP_TEXT = [
   "確認審核通過後，將審核通過文件印出。",
   "將審核通過的文件及審核結果交回人資，輕鬆完成任用送簽程序！",
 ];
-const STEP_NAME = ["傳｜上傳資料", "審｜線上審核", "改｜修正缺漏", "印｜列印結果", "送｜送出繳交"];
+const STEP_NAME = ["傳｜上傳資料", "審｜線上審核", "修｜修正缺漏", "印｜列印結果", "送｜送出繳交"];
 function setStep(n, finished = false) {
   document.querySelectorAll("#steps .step").forEach((el, i) => {
     el.classList.toggle("done", finished || i + 1 < n);
@@ -922,7 +922,7 @@ function renderNext() {
   if (r.overall === "fail") {
     setStep(3);
     box.style.cssText = "--c: var(--s3); --c-soft: var(--s3-soft)";
-    box.innerHTML = `<h3>Step 3｜改：修正缺漏</h3><p>請依下方「不通過」的項目補充或修改。修正後，清除舊檔案、重新上傳，再按「開始檢核」。</p>
+    box.innerHTML = `<h3>Step 3｜修：修正缺漏</h3><p>請依下方「不通過」的項目補充或修改。修正後，清除舊檔案、重新上傳，再按「開始檢核」。</p>
       <div class="row"><button class="btn" type="button" id="refixBtn">清除檔案，重新上傳</button></div>`;
     $("refixBtn").onclick = () => {
       items.length = 0;
