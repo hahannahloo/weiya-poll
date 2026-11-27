@@ -164,3 +164,16 @@ export async function runCleanup(db, now = Date.now()) {
   }
   return counts;
 }
+
+// 步驟 5「送」：標記這份送件已交回人資（只記一次）
+export async function markSubmitted(db, rec, user) {
+  if (rec.submittedAt) return rec;
+  const when = new Date().toISOString();
+  const updated = { ...rec, submittedAt: when, submittedBy: user.name };
+  await db.put("rec:" + rec.id, updated);
+  for (const key of ["sum:" + rec.id, `usum:${rec.username}:${rec.id}`]) {
+    const sum = await db.get(key);
+    if (sum) await db.put(key, { ...sum, submittedAt: when });
+  }
+  return updated;
+}

@@ -7,7 +7,7 @@ import { systemPrompt, OUTPUT_SCHEMA, RULE_DRAFT_PROMPT, RULE_DRAFT_SCHEMA } fro
 import { UNITS, currentRules, saveRules, ruleHistory, ruleVersion } from "./rulesets.js";
 import { reportDateTable } from "./calendar.js";
 import { CALENDAR_PROMPT, CALENDAR_SCHEMA, cleanCalendar } from "./holidays.js";
-import { saveRecord, listRecords, getRecord, getFile, deleteRecord, addLog, checkRetention, runCleanup } from "./records.js";
+import { saveRecord, listRecords, getRecord, getFile, deleteRecord, addLog, checkRetention, runCleanup, markSubmitted } from "./records.js";
 import { login, currentUser, dropSessions, newPasswordRecord, checkPassword, validUsername, publicUser, ROLES, BUILTIN_ADMIN } from "./auth.js";
 
 const MODEL = "claude-opus-5-5";
@@ -330,6 +330,16 @@ export default {
       if (path === "/records" && GET) {
         const who = user.role === "admin" ? (url.searchParams.get("user") || "").toLowerCase() : user.username;
         return json(await listRecords(db, { username: who, before: url.searchParams.get("before") }));
+      }
+      const subMatch = path.match(/^\/records\/([0-9a-z]+)\/submit$/);
+      if (subMatch && POST) {
+        const rec = await getRecord(db, subMatch[1], user);
+        if (!rec) return fail("找不到這筆紀錄", 404);
+        if (!rec.result || rec.result.overall === "fail") return fail("審核尚未通過，請先修正並重新審核", 400);
+        const already = !!rec.submittedAt;
+        const updated = await markSubmitted(db, rec, user);
+        if (!already) await addLog(db, { username: user.username, name: user.name, action: "已交回人資", record: rec.id, applicant: rec.result.applicant_name, overall: rec.result.overall });
+        return json({ submittedAt: updated.submittedAt, submittedBy: updated.submittedBy });
       }
       const recMatch = path.match(/^\/records\/([0-9a-z]+)(?:\/files\/(\d+))?$/);
       if (recMatch && GET) {

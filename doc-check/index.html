@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>任用送件檢核</title>
+<title>入職小幫手 HR Helper</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20viewBox%3D%220%200%2064%2064%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2216%22%20fill%3D%22%23b3261e%22/%3E%3Cpath%20d%3D%22M18%2012h20l10%2010v28a3%203%200%200%201-3%203H18a3%203%200%200%201-3-3V15a3%203%200%200%201%203-3z%22%20fill%3D%22%23fff%22/%3E%3Cpath%20d%3D%22M38%2012v8a2%202%200%200%200%202%202h8z%22%20fill%3D%22%23f3c5c2%22/%3E%3Ccircle%20cx%3D%2229%22%20cy%3D%2228%22%20r%3D%225%22%20fill%3D%22%23b3261e%22/%3E%3Cpath%20d%3D%22M20%2042c0-5%204-8%209-8s9%203%209%208z%22%20fill%3D%22%23b3261e%22/%3E%3Ccircle%20cx%3D%2246%22%20cy%3D%2247%22%20r%3D%2210%22%20fill%3D%22%2316794a%22%20stroke%3D%22%23fff%22%20stroke-width%3D%223%22/%3E%3Cpath%20d%3D%22M41%2047l3.5%203.5L51%2044%22%20fill%3D%22none%22%20stroke%3D%22%23fff%22%20stroke-width%3D%223%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22/%3E%3C/svg%3E">
 <style>
 :root {
   --bg: #f5f6f8; --card: #ffffff; --text: #1d2430; --muted: #667085; --line: #e3e6eb;
@@ -13,6 +14,12 @@
   --warn: #a15c00; --warn-soft: #fff4e0;
   --na: #667085; --na-soft: #eff1f4;
   --shadow: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.08);
+  /* 五個步驟的顏色：傳、審、改、印、送 */
+  --s1: #b3261e; --s1-soft: #fbeceb;
+  --s2: #b26a00; --s2-soft: #fff3df;
+  --s3: #7b3fa8; --s3-soft: #f3ebfa;
+  --s4: #1f62b5; --s4-soft: #e8f0fb;
+  --s5: #16794a; --s5-soft: #e6f4ec;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -21,6 +28,8 @@
     --pass: #4cc38a; --pass-soft: #16301f; --fail: #f2706a; --fail-soft: #3a1c1c;
     --warn: #f0b450; --warn-soft: #3a2c12; --na: #98a2b3; --na-soft: #262b33;
     --shadow: none;
+    --s1: #ef6b63; --s1-soft: #3a1f1e; --s2: #f0b450; --s2-soft: #3a2c12; --s3: #c59ae8; --s3-soft: #2d2238;
+    --s4: #7fb0f0; --s4-soft: #1b2a3d; --s5: #4cc38a; --s5-soft: #16301f;
   }
 }
 :root[data-theme="dark"] {
@@ -29,6 +38,8 @@
   --pass: #4cc38a; --pass-soft: #16301f; --fail: #f2706a; --fail-soft: #3a1c1c;
   --warn: #f0b450; --warn-soft: #3a2c12; --na: #98a2b3; --na-soft: #262b33;
   --shadow: none;
+  --s1: #ef6b63; --s1-soft: #3a1f1e; --s2: #f0b450; --s2-soft: #3a2c12; --s3: #c59ae8; --s3-soft: #2d2238;
+  --s4: #7fb0f0; --s4-soft: #1b2a3d; --s5: #4cc38a; --s5-soft: #16301f;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -138,20 +149,57 @@ table.list td.nowrap { white-space: nowrap; }
 .urow .info { flex: 1 1 200px; min-width: 0; }
 .urow .meta { color: var(--muted); font-size: .85rem; }
 
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand svg { flex: none; }
+.brand .eyebrow { font-size: .78rem; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+.brand h1 { line-height: 1.25; }
+.steps { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin-top: 16px; }
+.step { border-radius: 10px; padding: 8px 4px; text-align: center; background: var(--na-soft); color: var(--muted); border: 2px solid transparent; transition: background .2s, color .2s; }
+.step .ch { display: block; font-size: 1.35rem; font-weight: 800; line-height: 1.2; }
+.step .lb { display: block; font-size: .78rem; font-weight: 600; }
+.step .cp { display: none; font-size: .76rem; margin-top: 4px; line-height: 1.45; text-align: left; padding: 0 4px; }
+.step.done { background: var(--c-soft); color: var(--c); }
+.step.now { background: var(--c); color: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.15); }
+.step.now .cp { color: #fff; }
+.step.done .lb::after { content: " ✓"; }
+.step:nth-child(1) { --c: var(--s1); --c-soft: var(--s1-soft); }
+.step:nth-child(2) { --c: var(--s2); --c-soft: var(--s2-soft); }
+.step:nth-child(3) { --c: var(--s3); --c-soft: var(--s3-soft); }
+.step:nth-child(4) { --c: var(--s4); --c-soft: var(--s4-soft); }
+.step:nth-child(5) { --c: var(--s5); --c-soft: var(--s5-soft); }
+.step-hint { margin-top: 8px; font-size: .92rem; }
+.step-hint b { color: var(--text); }
+@media (min-width: 640px) {
+  .step .cp { display: block; }
+  .step-hint { display: none; }
+}
+.next { border-radius: 14px; padding: 14px 16px; margin-top: 16px; border: 2px solid var(--c); background: var(--c-soft); }
+.next h3 { margin: 0 0 4px; font-size: 1.05rem; color: var(--c); }
+.next p { margin: 0 0 10px; }
+.next .btn { background: var(--c); }
+.checklist { margin: 8px 0 0; padding-left: 1.4em; font-size: .9rem; color: var(--muted); }
+.print-only { display: none; }
+
 @media print {
   body { background: #fff; color: #000; }
   .no-print { display: none !important; }
   .card, .banner { box-shadow: none; break-inside: avoid-page; }
   details { display: block; } details > summary { display: none; }
   details:not([open]) > *:not(summary) { display: block; }
+  .print-only { display: block; }
+  .print-docs figure { margin: 0; break-before: page; }
+  .print-docs img { width: 100%; }
+  .steps, .step-hint, .userbar { display: none !important; }
 }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <h1>任用送件檢核</h1>
-    <p>上傳新進人員的任用送件（文件 1～7），AI 會依「分公司業務任用送件範例」逐條檢查，列出不通過的地方和修正方式。</p>
+    <div class="brand">
+      <svg viewBox="0 0 64 64" width="52" height="52" aria-hidden="true"><rect width="64" height="64" rx="16" fill="#b3261e"/><path d="M18 12h20l10 10v28a3 3 0 0 1-3 3H18a3 3 0 0 1-3-3V15a3 3 0 0 1 3-3z" fill="#fff"/><path d="M38 12v8a2 2 0 0 0 2 2h8z" fill="#f3c5c2"/><circle cx="29" cy="28" r="5" fill="#b3261e"/><path d="M20 42c0-5 4-8 9-8s9 3 9 8z" fill="#b3261e"/><circle cx="46" cy="47" r="10" fill="#16794a" stroke="#fff" stroke-width="3"/><path d="M41 47l3.5 3.5L51 44" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <div><div class="eyebrow">HR HELPER</div><h1>入職小幫手｜任用資料審核</h1></div>
+    </div>
     <div class="userbar no-print" id="userBar" hidden>
       <span class="who" id="whoAmI"></span>
       <button class="linkbtn" data-go="check" id="navCheck">檢核</button>
@@ -220,11 +268,25 @@ table.list td.nowrap { white-space: nowrap; }
   </section>
 
   <div id="checkView">
+  <nav class="steps no-print" id="steps" aria-label="送件進度">
+    <div class="step"><span class="ch">傳</span><span class="lb">上傳資料</span><span class="cp">依清單上傳您的任用表單與文件檔案。</span></div>
+    <div class="step"><span class="ch">審</span><span class="lb">線上審核</span><span class="cp">系統為您快速檢核格式與內容是否齊全。</span></div>
+    <div class="step"><span class="ch">改</span><span class="lb">修正缺漏</span><span class="cp">依審核提示補充或修改錯誤，確保資料 100% 正確。</span></div>
+    <div class="step"><span class="ch">印</span><span class="lb">列印結果</span><span class="cp">確認審核通過後，將審核通過文件印出。</span></div>
+    <div class="step"><span class="ch">送</span><span class="lb">送出繳交</span><span class="cp">將審核通過的文件及審核結果交回人資，輕鬆完成任用送簽程序！</span></div>
+  </nav>
+  <div class="step-hint muted no-print" id="stepHint"></div>
 
   <div class="demo-note no-print" id="demoBanner" hidden><b>⚠ 示範模式：還沒有連上檢核伺服器。</b>現在上傳的檔案不會被檢查，按下按鈕只會顯示一份固定的範例結果。部署伺服器並設定網址後，才會真的檢核。</div>
 
   <section class="card no-print" id="uploadCard">
-    <h2>1. 上傳文件</h2>
+    <h2>上傳資料</h2>
+    <details open style="margin-bottom:10px"><summary class="muted" style="font-weight:600">上傳清單：任用必備文件 1～7</summary>
+      <ol class="checklist">
+        <li>任用意見表</li><li>新進員工面談紀錄表</li><li>履歷資料表（不是人事資料表）</li>
+        <li>最高學歷畢業證書影本（已畢業者）</li><li>任用效益評估</li><li>徵信（證交所聯合徵信資料）</li><li>一類票查</li>
+      </ol>
+    </details>
     <label class="drop" id="drop">
       <input type="file" id="fileInput" multiple
         accept=".pdf,.jpg,.jpeg,.png,.webp,.gif,.heic,.heif,.docx,.xlsx,.xls,.csv,.txt,application/pdf,image/*">
@@ -530,6 +592,8 @@ $("checkBtn").addEventListener("click", async () => {
   }
   store.set("docCheckUnit", $("unit").value);
   checking = true;
+  lastCheck = null;
+  setStep(2);
   $("error").hidden = true;
   $("result").innerHTML = "";
   const btn = $("checkBtn");
@@ -558,8 +622,14 @@ $("checkBtn").addEventListener("click", async () => {
     if (result.record_id) {
       $("result").insertAdjacentHTML("afterbegin", `<div class="ok-msg no-print">✓ 已存到「紀錄」，之後可以隨時回來查看。</div>`);
     }
+    const sent = ready.map((it) => ({ name: it.file.name, kind: it.out.kind, media_type: it.out.media_type, data: it.out.data }));
+    lastCheck = { result, recordId: result.record_id || null, printed: false, submittedAt: null };
+    $("result").insertAdjacentHTML("beforeend", `<div class="no-print next" id="nextStep"></div>` + printDocsHtml(sent));
+    $("result").querySelector(".banner").insertAdjacentElement("afterend", $("nextStep"));
+    renderNext();
     $("result").scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (e) {
+    setStep(1);
     $("error").textContent = "檢核失敗：" + (e.message === "Failed to fetch" ? "連不到檢核伺服器，請檢查網路或伺服器網址" : e.message);
     $("error").hidden = false;
     $("status").textContent = "";
@@ -570,6 +640,99 @@ $("checkBtn").addEventListener("click", async () => {
     renderFiles();
   }
 });
+
+// ===== 五步驟進度：傳 → 審 → 改 → 印 → 送 =====
+const STEP_TEXT = [
+  "依清單上傳您的任用表單與文件檔案。",
+  "系統為您快速檢核格式與內容是否齊全。",
+  "依審核提示補充或修改錯誤，確保資料 100% 正確。",
+  "確認審核通過後，將審核通過文件印出。",
+  "將審核通過的文件及審核結果交回人資，輕鬆完成任用送簽程序！",
+];
+const STEP_NAME = ["傳｜上傳資料", "審｜線上審核", "改｜修正缺漏", "印｜列印結果", "送｜送出繳交"];
+function setStep(n, finished = false) {
+  document.querySelectorAll("#steps .step").forEach((el, i) => {
+    el.classList.toggle("done", finished || i + 1 < n);
+    el.classList.toggle("now", !finished && i + 1 === n);
+    if (!finished && i + 1 === n) el.setAttribute("aria-current", "step"); else el.removeAttribute("aria-current");
+  });
+  $("stepHint").innerHTML = finished
+    ? "<b>已完成</b>：任用送簽程序完成！"
+    : `<b>Step ${n}｜${STEP_NAME[n - 1]}</b>　${STEP_TEXT[n - 1]}`;
+}
+
+let lastCheck = null; // { result, recordId, files }
+
+// 結果下方的「下一步」區塊
+function renderNext() {
+  const box = $("nextStep");
+  if (!box || !lastCheck) return;
+  const r = lastCheck.result;
+  if (r.overall === "fail") {
+    setStep(3);
+    box.style.cssText = "--c: var(--s3); --c-soft: var(--s3-soft)";
+    box.innerHTML = `<h3>Step 3｜改：修正缺漏</h3><p>請依下方「不通過」的項目補充或修改。修正後，清除舊檔案、重新上傳，再按「開始檢核」。</p>
+      <div class="row"><button class="btn" type="button" id="refixBtn">清除檔案，重新上傳</button></div>`;
+    $("refixBtn").onclick = () => {
+      items.length = 0;
+      renderFiles();
+      setStep(1);
+      $("uploadCard").scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+  } else if (!lastCheck.printed) {
+    setStep(4);
+    box.style.cssText = "--c: var(--s4); --c-soft: var(--s4-soft)";
+    box.innerHTML = `<h3>Step 4｜印：列印結果</h3><p>${r.overall === "warn" ? "審核沒有不通過的項目，但有「需確認」的地方，請先確認無誤。" : "審核通過！"}請列印審核結果與送件文件（照片會一起印出，PDF 請另外列印原檔）。</p>
+      <div class="row"><button class="btn" type="button" id="printAllBtn">🖨️ 列印審核結果與文件</button></div>`;
+    $("printAllBtn").onclick = () => {
+      $("result").querySelectorAll("details").forEach((d) => (d.open = true));
+      window.print();
+      lastCheck.printed = true;
+      renderNext();
+    };
+  } else if (!lastCheck.submittedAt) {
+    setStep(5);
+    box.style.cssText = "--c: var(--s5); --c-soft: var(--s5-soft)";
+    box.innerHTML = `<h3>Step 5｜送：送出繳交</h3><p>請將審核通過的文件及審核結果交回人資。交出後按下方按鈕，系統會記錄完成時間。</p>
+      <div class="row"><button class="btn" type="button" id="submitBtn">✓ 已交回人資</button><button class="btn ghost" type="button" id="reprintBtn">再列印一次</button></div>
+      <div class="error" id="submitErr" hidden></div>`;
+    $("reprintBtn").onclick = () => window.print();
+    $("submitBtn").onclick = async () => {
+      try {
+        lastCheck.submittedAt = lastCheck.recordId
+          ? (await api(`/records/${lastCheck.recordId}/submit`, {})).submittedAt
+          : new Date().toISOString();
+        renderNext();
+      } catch (err) {
+        showError("submitErr", err.message);
+      }
+    };
+  } else {
+    setStep(5, true);
+    box.style.cssText = "--c: var(--s5); --c-soft: var(--s5-soft)";
+    box.innerHTML = `<h3>🎉 已完成任用送簽程序！</h3><p>已於 ${new Date(lastCheck.submittedAt).toLocaleString("zh-TW")} 交回人資。紀錄可以在「我的紀錄」查看。</p>
+      <div class="row"><button class="btn" type="button" id="newCaseBtn">開始下一位</button></div>`;
+    $("newCaseBtn").onclick = () => {
+      lastCheck = null;
+      items.length = 0;
+      $("note").value = "";
+      $("result").innerHTML = "";
+      renderFiles();
+      setStep(1);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    };
+  }
+}
+
+// 列印用：把上傳的照片附在報告後面
+function printDocsHtml(files) {
+  const imgs = files.filter((f) => f.kind === "image");
+  const others = files.filter((f) => f.kind !== "image");
+  return `<div class="print-only print-docs">
+    ${imgs.map((f) => `<figure><img src="data:${esc(f.media_type)};base64,${f.data}" alt=""><figcaption class="muted">${esc(f.name)}</figcaption></figure>`).join("")}
+    ${others.length ? `<p class="muted">另需列印的原始檔：${others.map((f) => esc(f.name)).join("、")}</p>` : ""}
+  </div>`;
+}
 
 // ===== 結果 =====
 const LABEL = { pass: "通過", fail: "不通過", warn: "需確認", na: "不適用" };
@@ -754,6 +917,8 @@ async function api(path, body) {
 // 換人登入或登出時，清掉畫面上前一個人的檔案和結果
 function clearWorkspace() {
   items.length = 0;
+  lastCheck = null;
+  setStep(1);
   $("note").value = "";
   $("unit").value = store.get("docCheckUnit");
   $("result").innerHTML = "";
@@ -889,7 +1054,7 @@ async function loadHistory(reset) {
     const { records, more } = await api("/records?" + q);
     const html = records.map((r) => `<a class="urow" href="#rec-${esc(r.id)}" style="color:inherit;text-decoration:none">
       <div class="info"><b>${esc(r.applicant || (r.overall === "error" ? "（檢核失敗）" : "（未辨識）"))}</b>
-        <div class="meta">${fmtTime(r.time)}${isAdmin ? ` · ${esc(r.name)}（${esc(r.username)}）` : ""} · ${r.fileCount} 個檔案${r.filesDeleted ? "（已刪除）" : ""}</div></div>
+        <div class="meta">${fmtTime(r.time)}${isAdmin ? ` · ${esc(r.name)}（${esc(r.username)}）` : ""} · ${r.fileCount} 個檔案${r.filesDeleted ? "（已刪除）" : ""}${r.submittedAt ? " · 已交回人資" : ""}</div></div>
       <div>${r.overall === "error" ? '<span class="chip na">失敗</span>'
         : `<span class="chip ${esc(r.overall)}">${LABEL[r.overall] || esc(r.overall)}</span> <span class="meta">不通過 ${r.fail}・需確認 ${r.warn}</span>`}</div></a>`).join("");
     if (reset) $("historyList").innerHTML = html || '<p class="muted">還沒有任何檢核紀錄。</p>';
@@ -922,6 +1087,8 @@ async function loadRecord(id) {
     $("recordMeta").innerHTML = `<h2>檢核紀錄</h2>
       <div class="meta muted">${fmtTime(rec.time)} · 上傳者：${esc(rec.name)}（${esc(rec.username)}）${rec.unit ? " · 送件單位：" + esc(rec.unit) : ""}${rec.ruleVersion != null ? `（規則第 ${rec.ruleVersion} 版）` : ""}</div>
       ${rec.note ? `<div class="muted">補充說明：${esc(rec.note)}</div>` : ""}
+      <div class="muted">送出狀態：${rec.submittedAt ? `<span class="chip pass">已交回人資</span> ${fmtTime(rec.submittedAt)}（${esc(rec.submittedBy || "")}）`
+        : rec.result && rec.result.overall !== "fail" ? '尚未交回人資 <button class="linkbtn" type="button" id="recSubmit">標記為已交回人資</button>' : "審核未通過"}</div>
       <h2 style="margin-top:14px">上傳的檔案</h2>
       ${rec.filesDeleted ? `<p class="muted">檔案已於 ${fmtTime(rec.filesDeleted)} 依資料保存期限刪除，檢核結果仍保留。</p>` : ""}
       <div>${rec.files.map((f, i) => `<div class="urow"><div class="info">${esc(f.name)}<div class="meta">${fmtSize(f.size * 0.75)}</div></div>
@@ -953,6 +1120,10 @@ async function loadRecord(id) {
       }
     }));
 
+    const sub = $("recSubmit");
+    if (sub) sub.addEventListener("click", async () => {
+      try { await api(`/records/${rec.id}/submit`, {}); loadRecord(rec.id); } catch (err) { sub.textContent = err.message; }
+    });
     const del = $("recDelete");
     if (del) del.addEventListener("click", async () => {
       if (!confirmRecDelete) {
@@ -1223,6 +1394,7 @@ $("logRefresh").addEventListener("click", loadLogs);
 
 // ===== 啟動 =====
 async function init() {
+  setStep(1);
   $("unit").value = store.get("docCheckUnit");
   if (CONFIG.apiUrl && store.get(TOKEN_KEY)) {
     try { me = (await api("/me")).user; } catch { me = null; }
