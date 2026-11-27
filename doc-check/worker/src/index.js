@@ -4,7 +4,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { DurableObject } from "cloudflare:workers";
 import { systemPrompt, OUTPUT_SCHEMA, RULE_DRAFT_PROMPT, RULE_DRAFT_SCHEMA } from "./rules.js";
-import { UNITS, currentRules, saveRules, ruleHistory, ruleVersion } from "./rulesets.js";
+import { UNITS, currentRules, saveRules, ruleHistory, ruleVersion, checklistOf } from "./rulesets.js";
 import { reportDateTable } from "./calendar.js";
 import { CALENDAR_PROMPT, CALENDAR_SCHEMA, cleanCalendar } from "./holidays.js";
 import { saveRecord, listRecords, getRecord, getFile, deleteRecord, addLog, checkRetention, runCleanup, markSubmitted } from "./records.js";
@@ -325,6 +325,15 @@ export default {
       if (path === "/password" && POST) return await handleChangePassword(request, db, user);
       if (path === "/check" && POST) return await handleCheck(request, env, db, user);
       if (path === "/calendar" && GET) return json({ years: (await loadCalendars(db)).years });
+      if (path === "/checklist" && GET) {
+        let r;
+        try {
+          r = await currentRules(db, url.searchParams.get("unit"));
+        } catch (e) {
+          throw new UserError(e.message);
+        }
+        return json({ unit: r.unit, version: r.version, draft: r.version === 0 && r.unit === "總公司", documents: checklistOf(r.text) });
+      }
 
       // 檢核紀錄：一般使用者只看得到自己的，管理者看得到全部（可用 ?user= 篩選）
       if (path === "/records" && GET) {

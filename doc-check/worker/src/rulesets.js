@@ -44,3 +44,12 @@ export async function ruleVersion(db, unit, version) {
   if (Number(version) === 0 && !(await db.get(verKey(unit, 0)))) return currentRules(db, unit).then((r) => (r.version === 0 ? r : null));
   return (await db.get(verKey(unit, Number(version)))) || null;
 }
+
+// 從規則全文讀出必備文件清單（「## 文件 N：名稱（說明）」標題），給上傳頁顯示
+export function checklistOf(text) {
+  const list = [];
+  for (const m of String(text).matchAll(/^##\s*文件\s*([0-9０-９]+)\s*[：:]\s*(.+)$/gm)) {
+    list.push({ no: m[1], title: m[2].replace(/（[^）]*）|\([^)]*\)/g, "").trim() || m[2].trim(), detail: m[2].trim() });
+  }
+  return list;
+}

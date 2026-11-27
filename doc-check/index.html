@@ -283,11 +283,16 @@ table.list td.nowrap { white-space: nowrap; }
 
   <section class="card no-print" id="uploadCard">
     <h2>上傳資料</h2>
-    <details open style="margin-bottom:10px"><summary class="muted" style="font-weight:600">上傳清單：任用必備文件 1～7</summary>
-      <ol class="checklist">
-        <li>任用意見表</li><li>新進員工面談紀錄表</li><li>履歷資料表（不是人事資料表）</li>
-        <li>最高學歷畢業證書影本（已畢業者）</li><li>任用效益評估</li><li>徵信（證交所聯合徵信資料）</li><li>一類票查</li>
-      </ol>
+    <label class="field" style="margin-top:0">送件單位（先選擇，會顯示要上傳的文件，並套用對應的檢核規則）
+      <select id="unit" required>
+        <option value="">請選擇</option>
+        <option value="分公司">分公司</option>
+        <option value="總公司">總公司</option>
+      </select>
+    </label>
+    <details open style="margin:12px 0 10px"><summary class="muted" style="font-weight:600" id="checklistTitle">上傳清單</summary>
+      <ol class="checklist" id="checklist"></ol>
+      <div class="demo-note" id="checklistWarn" hidden style="margin-top:8px"></div>
     </details>
     <label class="drop" id="drop">
       <input type="file" id="fileInput" multiple
@@ -297,13 +302,6 @@ table.list td.nowrap { white-space: nowrap; }
     </label>
     <ul class="files" id="fileList"></ul>
 
-    <label class="field">送件單位（依此套用分公司或總公司的檢核規則）
-      <select id="unit" required>
-        <option value="">請選擇</option>
-        <option value="分公司">分公司</option>
-        <option value="總公司">總公司</option>
-      </select>
-    </label>
     <label class="field">補充說明（選填，例如：應徵者無工作經歷、特休已附假卡）
       <textarea id="note" maxlength="2000"></textarea>
     </label>
@@ -643,6 +641,43 @@ $("checkBtn").addEventListener("click", async () => {
   }
 });
 
+// ===== 上傳清單：依送件單位，從目前的規則讀出必備文件 =====
+const DEMO_CHECKLIST = ["任用意見表", "新進員工面談紀錄表", "履歷資料表（不是人事資料表）", "最高學歷畢業證書影本（已畢業者）", "任用效益評估", "徵信（證交所聯合徵信資料）", "一類票查"];
+async function loadChecklist() {
+  const unit = $("unit").value;
+  const warn = $("checklistWarn");
+  warn.hidden = true;
+  if (!unit) {
+    $("checklistTitle").textContent = "上傳清單";
+    $("checklist").innerHTML = '<li style="list-style:none;margin-left:-1.4em">請先選擇送件單位，這裡會列出需要上傳的文件。</li>';
+    return;
+  }
+  $("checklistTitle").textContent = `上傳清單：${unit}任用必備文件`;
+  if (!CONFIG.apiUrl) {
+    $("checklist").innerHTML = unit === "分公司" ? DEMO_CHECKLIST.map((t) => `<li>${esc(t)}</li>`).join("")
+      : '<li style="list-style:none;margin-left:-1.4em">示範模式沒有總公司清單。</li>';
+    return;
+  }
+  if (!me) return;
+  try {
+    const c = await api("/checklist?unit=" + encodeURIComponent(unit));
+    if (unit !== $("unit").value) return; // 使用者已經換了選項
+    $("checklist").innerHTML = c.documents.length
+      ? c.documents.map((d) => `<li value="${esc(d.no)}" title="${esc(d.detail)}">${esc(d.title)}</li>`).join("")
+      : '<li style="list-style:none;margin-left:-1.4em">規則裡沒有列出文件清單，請洽管理者。</li>';
+    if (c.draft) {
+      warn.textContent = "⚠ 總公司的必備文件與規則還沒建立，目前暫時沿用分公司的清單與規則，檢核結果僅供參考。請管理者上傳總公司範例更新。";
+      warn.hidden = false;
+    }
+  } catch (err) {
+    $("checklist").innerHTML = `<li style="list-style:none;margin-left:-1.4em">${esc(err.message)}</li>`;
+  }
+}
+$("unit").addEventListener("change", () => {
+  store.set("docCheckUnit", $("unit").value);
+  loadChecklist();
+});
+
 // ===== 五步驟進度：傳 → 審 → 改 → 印 → 送 =====
 const STEP_TEXT = [
   "依清單上傳您的任用表單與文件檔案。",
@@ -978,6 +1013,7 @@ $("loginForm").addEventListener("submit", async (e) => {
     store.set(TOKEN_KEY, data.token);
     clearWorkspace();
     me = data.user;
+    loadChecklist();
     $("loginPw").value = "";
     route();
   } catch (err) {
@@ -1030,6 +1066,7 @@ $("regForm").addEventListener("submit", async (e) => {
     store.set(TOKEN_KEY, data.token);
     clearWorkspace();
     me = data.user;
+    loadChecklist();
     $("regForm").reset();
     history.replaceState(null, "", location.pathname + location.search);
     route();
@@ -1402,6 +1439,7 @@ async function init() {
     try { me = (await api("/me")).user; } catch { me = null; }
   }
   route();
+  loadChecklist();
 }
 init();
 renderFiles();
