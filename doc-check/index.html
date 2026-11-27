@@ -691,18 +691,52 @@ function setStep(n, finished = false) {
     : `<b>Step ${n}｜${STEP_NAME[n - 1]}</b>　${STEP_TEXT[n - 1]}`;
 }
 
-let lastCheck = null; // { result, recordId, files }
+let lastCheck = null; // { result, recordId, printed, submittedAt, override }
+
+// 例外放行的說明（畫面與列印都看得到）
+function overrideNoteHtml(o) {
+  return `<div class="demo-note override-note" style="margin-top:12px"><b>例外放行</b>：由 ${esc(o.by)} 於 ${new Date(o.at).toLocaleString("zh-TW")} 核准。原因：${esc(o.reason)}</div>`;
+}
+
+// 管理者的例外放行表單；成功後呼叫 done(override)
+function overrideFormHtml() {
+  return `<div style="margin-top:14px;padding-top:12px;border-top:1px dashed var(--line)">
+    <label class="field" style="margin-top:0">例外放行原因（管理者，必填，例如：經○○經理核准，畢業證書補交）
+      <textarea id="ovReason" maxlength="500"></textarea></label>
+    <div class="row" style="margin-top:8px"><button class="btn ghost" type="button" id="ovBtn" style="flex:0 0 auto">這是核准的例外，仍要繼續</button></div>
+    <div class="error" id="ovErr" hidden></div></div>`;
+}
+function bindOverride(recordId, done) {
+  const btn = $("ovBtn");
+  if (!btn) return;
+  btn.onclick = async () => {
+    showError("ovErr", "");
+    try {
+      const { override } = await api(`/admin/records/${recordId}/override`, { reason: $("ovReason").value });
+      done(override);
+    } catch (err) {
+      showError("ovErr", err.message);
+    }
+  };
+}
 
 // 結果下方的「下一步」區塊
 function renderNext() {
   const box = $("nextStep");
   if (!box || !lastCheck) return;
   const r = lastCheck.result;
-  if (r.overall === "fail") {
+  if (r.overall === "fail" && !lastCheck.override) {
     setStep(3);
     box.style.cssText = "--c: var(--s3); --c-soft: var(--s3-soft)";
     box.innerHTML = `<h3>Step 3｜改：修正缺漏</h3><p>請依下方「不通過」的項目補充或修改。修正後，清除舊檔案、重新上傳，再按「開始檢核」。</p>
-      <div class="row"><button class="btn" type="button" id="refixBtn">清除檔案，重新上傳</button></div>`;
+      <div class="row"><button class="btn" type="button" id="refixBtn">清除檔案，重新上傳</button></div>
+      ${me?.role === "admin" && lastCheck.recordId ? overrideFormHtml()
+        : '<p class="muted" style="margin:10px 0 0">若這是核准的例外，請洽管理者到「全部紀錄」協助例外放行。</p>'}`;
+    bindOverride(lastCheck.recordId, (o) => {
+      lastCheck.override = o;
+      $("nextStep").insertAdjacentHTML("beforebegin", overrideNoteHtml(o));
+      renderNext();
+    });
     $("refixBtn").onclick = () => {
       items.length = 0;
       renderFiles();
@@ -712,7 +746,7 @@ function renderNext() {
   } else if (!lastCheck.printed) {
     setStep(4);
     box.style.cssText = "--c: var(--s4); --c-soft: var(--s4-soft)";
-    box.innerHTML = `<h3>Step 4｜印：列印結果</h3><p>${r.overall === "warn" ? "審核沒有不通過的項目，但有「需確認」的地方，請先確認無誤。" : "審核通過！"}請列印審核結果與送件文件（照片會一起印出，PDF 請另外列印原檔）。</p>
+    box.innerHTML = `<h3>Step 4｜印：列印結果</h3><p>${lastCheck.override ? "已例外放行。" : r.overall === "warn" ? "審核沒有不通過的項目，但有「需確認」的地方，請先確認無誤。" : "審核通過！"}請列印審核結果與送件文件（照片會一起印出，PDF 請另外列印原檔）。</p>
       <div class="row"><button class="btn" type="button" id="printAllBtn">🖨️ 列印審核結果與文件</button></div>`;
     $("printAllBtn").onclick = () => {
       $("result").querySelectorAll("details").forEach((d) => (d.open = true));
@@ -1086,7 +1120,7 @@ async function loadHistory(reset) {
     const { records, more } = await api("/records?" + q);
     const html = records.map((r) => `<a class="urow" href="#rec-${esc(r.id)}" style="color:inherit;text-decoration:none">
       <div class="info"><b>${esc(r.applicant || (r.overall === "error" ? "（檢核失敗）" : "（未辨識）"))}</b>
-        <div class="meta">${fmtTime(r.time)}${isAdmin ? ` · ${esc(r.name)}（${esc(r.username)}）` : ""} · ${r.fileCount} 個檔案${r.filesDeleted ? "（已刪除）" : ""}${r.submittedAt ? " · 已交回人資" : ""}</div></div>
+        <div class="meta">${fmtTime(r.time)}${isAdmin ? ` · ${esc(r.name)}（${esc(r.username)}）` : ""} · ${r.fileCount} 個檔案${r.filesDeleted ? "（已刪除）" : ""}${r.override ? " · 例外放行" : ""}${r.submittedAt ? " · 已交回人資" : ""}</div></div>
       <div>${r.overall === "error" ? '<span class="chip na">失敗</span>'
         : `<span class="chip ${esc(r.overall)}">${LABEL[r.overall] || esc(r.overall)}</span> <span class="meta">不通過 ${r.fail}・需確認 ${r.warn}</span>`}</div></a>`).join("");
     if (reset) $("historyList").innerHTML = html || '<p class="muted">還沒有任何檢核紀錄。</p>';
@@ -1120,7 +1154,10 @@ async function loadRecord(id) {
       <div class="meta muted">${fmtTime(rec.time)} · 上傳者：${esc(rec.name)}（${esc(rec.username)}）${rec.unit ? " · 送件單位：" + esc(rec.unit) : ""}${rec.ruleVersion != null ? `（規則第 ${rec.ruleVersion} 版）` : ""}</div>
       ${rec.note ? `<div class="muted">補充說明：${esc(rec.note)}</div>` : ""}
       <div class="muted">送出狀態：${rec.submittedAt ? `<span class="chip pass">已交回人資</span> ${fmtTime(rec.submittedAt)}（${esc(rec.submittedBy || "")}）`
-        : rec.result && rec.result.overall !== "fail" ? '尚未交回人資 <button class="linkbtn" type="button" id="recSubmit">標記為已交回人資</button>' : "審核未通過"}</div>
+        : rec.result && (rec.result.overall !== "fail" || rec.override) ? '尚未交回人資 <button class="linkbtn" type="button" id="recSubmit">標記為已交回人資</button>'
+        : "審核未通過" + (isAdmin ? "" : "（若是核准的例外，請洽管理者例外放行）")}</div>
+      ${rec.override ? overrideNoteHtml(rec.override) : ""}
+      ${isAdmin && rec.result && rec.result.overall === "fail" && !rec.override ? overrideFormHtml() : ""}
       <h2 style="margin-top:14px">上傳的檔案</h2>
       ${rec.filesDeleted ? `<p class="muted">檔案已於 ${fmtTime(rec.filesDeleted)} 依資料保存期限刪除，檢核結果仍保留。</p>` : ""}
       <div>${rec.files.map((f, i) => `<div class="urow"><div class="info">${esc(f.name)}<div class="meta">${fmtSize(f.size * 0.75)}</div></div>
@@ -1128,6 +1165,7 @@ async function loadRecord(id) {
         <div id="filePreview${i}"></div>`).join("")}</div>
       ${isAdmin ? '<div class="row" style="margin-top:14px"><button class="btn ghost" id="recDelete" style="color:var(--fail)">刪除這筆紀錄</button></div>' : ""}`;
     if (rec.result) renderResult(rec.result, false, $("recordResult"), rec.time);
+    if (rec.result && rec.override) $("recordResult").querySelector(".banner").insertAdjacentHTML("afterend", overrideNoteHtml(rec.override));
     else $("recordResult").innerHTML = `<div class="error">這次檢核失敗：${esc(rec.error)}</div>`;
 
     $("recordMeta").querySelectorAll("[data-file]").forEach((btn) => btn.addEventListener("click", async () => {
@@ -1152,6 +1190,7 @@ async function loadRecord(id) {
       }
     }));
 
+    bindOverride(rec.id, () => loadRecord(rec.id));
     const sub = $("recSubmit");
     if (sub) sub.addEventListener("click", async () => {
       try { await api(`/records/${rec.id}/submit`, {}); loadRecord(rec.id); } catch (err) { sub.textContent = err.message; }

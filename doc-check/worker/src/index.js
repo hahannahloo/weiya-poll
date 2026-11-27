@@ -7,7 +7,7 @@ import { systemPrompt, OUTPUT_SCHEMA, RULE_DRAFT_PROMPT, RULE_DRAFT_SCHEMA } fro
 import { UNITS, currentRules, saveRules, ruleHistory, ruleVersion, checklistOf } from "./rulesets.js";
 import { reportDateTable } from "./calendar.js";
 import { CALENDAR_PROMPT, CALENDAR_SCHEMA, cleanCalendar } from "./holidays.js";
-import { saveRecord, listRecords, getRecord, getFile, deleteRecord, addLog, checkRetention, runCleanup, markSubmitted } from "./records.js";
+import { saveRecord, listRecords, getRecord, getFile, deleteRecord, addLog, checkRetention, runCleanup, markSubmitted, overrideRecord } from "./records.js";
 import { login, currentUser, dropSessions, newPasswordRecord, checkPassword, validUsername, publicUser, ROLES, BUILTIN_ADMIN } from "./auth.js";
 
 const MODEL = "claude-opus-5-5";
@@ -344,7 +344,7 @@ export default {
       if (subMatch && POST) {
         const rec = await getRecord(db, subMatch[1], user);
         if (!rec) return fail("找不到這筆紀錄", 404);
-        if (!rec.result || rec.result.overall === "fail") return fail("審核尚未通過，請先修正並重新審核", 400);
+        if (!rec.result || (rec.result.overall === "fail" && !rec.override)) return fail("審核尚未通過，請先修正並重新審核，或請管理者例外放行", 400);
         const already = !!rec.submittedAt;
         const updated = await markSubmitted(db, rec, user);
         if (!already) await addLog(db, { username: user.username, name: user.name, action: "已交回人資", record: rec.id, applicant: rec.result.applicant_name, overall: rec.result.overall });
@@ -365,6 +365,18 @@ export default {
       if (path === "/admin/users" && GET) return json({ users: await listUsers(db) });
       if (path === "/admin/users" && POST) return await handleSaveUser(request, db, user);
       if (path === "/admin/users/delete" && POST) return await handleDeleteUser(request, db, user);
+      const ovMatch = path.match(/^\/admin\/records\/([0-9a-z]+)\/override$/);
+      if (ovMatch && POST) {
+        const rec = await getRecord(db, ovMatch[1], user);
+        if (!rec) return fail("找不到這筆紀錄", 404);
+        if (!rec.result || rec.result.overall !== "fail") return fail("只有審核不通過的紀錄需要例外放行", 400);
+        if (rec.override) return json({ override: rec.override });
+        const reason = String((await readBody(request)).reason || "").trim().slice(0, 500);
+        if (reason.length < 4) return fail("請填寫例外放行的原因（至少 4 個字）", 400);
+        const updated = await overrideRecord(db, rec, user, reason);
+        await addLog(db, { username: user.username, name: user.name, action: "例外放行", record: rec.id, applicant: rec.result.applicant_name, overall: `${rec.name} 的送件：${reason}` });
+        return json({ override: updated.override });
+      }
       if (path === "/admin/records/delete" && POST) {
         const { id } = await readBody(request);
         const rec = await getRecord(db, id, user);

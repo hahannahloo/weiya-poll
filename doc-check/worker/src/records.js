@@ -24,7 +24,7 @@ function summaryOf(rec) {
     id: rec.id, time: rec.time, username: rec.username, name: rec.name,
     applicant: r?.applicant_name || "", overall: r ? r.overall : "error",
     fail: count("fail"), warn: count("warn"), fileCount: rec.files.length,
-    error: rec.error || "",
+    error: rec.error || "", override: !!rec.override, submittedAt: rec.submittedAt || null,
   };
 }
 
@@ -174,6 +174,18 @@ export async function markSubmitted(db, rec, user) {
   for (const key of ["sum:" + rec.id, `usum:${rec.username}:${rec.id}`]) {
     const sum = await db.get(key);
     if (sum) await db.put(key, { ...sum, submittedAt: when });
+  }
+  return updated;
+}
+
+// 例外放行（只有管理者）：審核不通過，但經核准仍可繼續列印、交回人資
+export async function overrideRecord(db, rec, user, reason) {
+  const override = { at: new Date().toISOString(), by: user.name, username: user.username, reason };
+  const updated = { ...rec, override };
+  await db.put("rec:" + rec.id, updated);
+  for (const key of ["sum:" + rec.id, `usum:${rec.username}:${rec.id}`]) {
+    const sum = await db.get(key);
+    if (sum) await db.put(key, { ...sum, override: true });
   }
   return updated;
 }
