@@ -135,6 +135,8 @@ details summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
     <p>上傳新進人員的任用送件（文件 1～7），AI 會依「分公司業務任用送件範例」逐條檢查，列出不通過的地方和修正方式。</p>
   </header>
 
+  <div class="demo-note no-print" id="demoBanner" hidden><b>⚠ 示範模式：還沒有連上檢核伺服器。</b>現在上傳的檔案不會被檢查，按下按鈕只會顯示一份固定的範例結果。部署伺服器並設定網址後，才會真的檢核。</div>
+
   <section class="card no-print" id="uploadCard">
     <h2>1. 上傳文件</h2>
     <label class="drop" id="drop">
@@ -334,7 +336,11 @@ drop.addEventListener("drop", (e) => addFiles(e.dataTransfer.files));
 // ===== 檢核 =====
 let checking = false;
 $("accessCode").value = store.get("docCheckCode");
-if (!CONFIG.apiUrl) $("codeField").hidden = true;
+if (!CONFIG.apiUrl) {
+  $("codeField").hidden = true;
+  $("checkBtn").textContent = "查看示範結果（尚未連上檢核伺服器）";
+  $("demoBanner").hidden = false;
+}
 
 $("checkBtn").addEventListener("click", async () => {
   const ready = items.filter((it) => it.status === "ready");
@@ -382,7 +388,7 @@ $("checkBtn").addEventListener("click", async () => {
   } finally {
     clearInterval(tick);
     checking = false;
-    btn.textContent = "開始檢核";
+    btn.textContent = CONFIG.apiUrl ? "開始檢核" : "查看示範結果（尚未連上檢核伺服器）";
     renderFiles();
   }
 });
@@ -434,9 +440,9 @@ function renderResult(r, isDemo) {
       : `<section class="card"><details><summary>${title}（${list.length}）</summary>${body}</details></section>`;
   };
   $("result").innerHTML = `
-    ${isDemo ? '<div class="demo-note no-print">這是<b>示範結果</b>，還沒有連上檢核伺服器。部署完成後把網址填進 CONFIG.apiUrl 就會真的檢核你上傳的檔案。</div>' : ""}
+    ${isDemo ? '<div class="demo-note no-print" style="font-size:1rem"><b>⚠ 以下是固定的範例結果，不是你上傳檔案的檢核。</b>還沒有連上檢核伺服器，你上傳的檔案沒有被檢查。</div>' : ""}
     <div class="banner ${esc(r.overall)}">
-      <div class="big">${OVERALL[r.overall] || esc(r.overall)}</div>
+      <div class="big">${isDemo ? "【範例】" : ""}${OVERALL[r.overall] || esc(r.overall)}</div>
       <div class="who">應徵者：${esc(r.applicant_name)}　·　檢核時間：${new Date().toLocaleString("zh-TW")}</div>
       <div class="line">${esc(r.headline)}</div>
       <div class="counts">${counts}</div>
