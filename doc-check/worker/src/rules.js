@@ -1,12 +1,6 @@
-// 檢核規則的文字放在 ../rules.md（用手機在 GitHub 上就能改）。這個檔案只負責組合給 AI 的指示和輸出格式。
-import RULES_MD from "../rules.md";
-import { parseHolidays } from "./calendar.js";
+// 組合給 AI 的指示和輸出格式。規則全文由 rulesets.js 依送件單位提供（管理者在網頁上維護）。
 
-// 去掉 HTML 註解和國定假日段落（假日改由程式算成「可報到日期表」）
-export const RULES = RULES_MD.replace(/<!--[\s\S]*?-->/g, "").split(/^##\s*國定假日.*$/m)[0].trim();
-export const HOLIDAYS = parseHolidays(RULES_MD);
-
-export const SYSTEM_PROMPT = `你是永豐金證券人資的「任用送件檢核員」（分公司、總公司的任用送件都會處理）。使用者會上傳一位新進人員的任用送件文件（PDF、照片、Word、Excel 等），你要依照下方檢核標準，逐條檢查，找出所有不符合的地方。
+export const systemPrompt = (unit, rules) => `你是永豐金證券人資的「任用送件檢核員」。這次是「${unit}」的任用送件。使用者會上傳一位新進人員的任用送件文件（PDF、照片、Word、Excel 等），你要依照下方檢核標準，逐條檢查，找出所有不符合的地方。
 
 工作方式：
 1. 先辨識每個檔案、每一頁是哪一份文件（文件 1～7）。照片可能歪斜、反光、翻拍螢幕，請盡力判讀。
@@ -18,7 +12,7 @@ export const SYSTEM_PROMPT = `你是永豐金證券人資的「任用送件檢�
 7. 報到日期相關規則，一律對照使用者訊息裡的「可報到日期表」判斷，不要自己推算星期幾。
 8. 所有輸出文字使用繁體中文。
 
-${RULES}`;
+${rules}`;
 
 // 結構化輸出的格式（Claude 會照這個格式回傳 JSON）
 export const OUTPUT_SCHEMA = {
@@ -66,5 +60,42 @@ export const OUTPUT_SCHEMA = {
         },
       },
     },
+  },
+};
+
+// 依新範例產生規則草稿
+export const RULE_DRAFT_PROMPT = `你協助人資維護「任用送件檢核規則」。使用者會提供：目前的規則全文，以及新的送件範例（範例上通常有紅字、框線或螢光筆標註應注意的地方），可能另附說明。
+
+請產生「更新後的完整規則全文」：
+1. 保留原本的格式：Markdown 標題分文件段落、每條規則一行、規則編號（例如 1-5、3-12a、X-1）。
+2. 範例上新增的要求 → 加入對應文件段落，給新的編號。
+3. 範例上改變的要求（例如新的表單版本日期、欄位改名、新的標準選項）→ 修改原規則。
+4. 範例沒有提到的既有規則 → 原樣保留，不要刪除；除非範例或使用者說明明確表示該規則已取消。
+5. 每條規則要寫清楚「什麼情況算不通過、什麼情況算警告」，讓檢核員可以判斷。
+6. 不確定的地方不要自行編造，寫在 notes 請管理者確認。
+7. 全部使用繁體中文。
+
+changes 列出每一項變更（新增／修改／刪除），附規則編號與一句話說明，讓管理者快速核對。`;
+
+export const RULE_DRAFT_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["rules_text", "changes", "notes"],
+  properties: {
+    rules_text: { type: "string", description: "更新後的完整規則全文（Markdown）" },
+    changes: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["type", "rule_id", "description"],
+        properties: {
+          type: { type: "string", enum: ["新增", "修改", "刪除"] },
+          rule_id: { type: "string" },
+          description: { type: "string" },
+        },
+      },
+    },
+    notes: { type: "string", description: "需要管理者確認的地方；沒有就留空字串" },
   },
 };

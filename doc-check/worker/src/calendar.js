@@ -4,12 +4,6 @@
 const WEEKDAY = ["日", "一", "二", "三", "四", "五", "六"];
 const DAY = 86400000;
 
-// 從 rules.md 的「國定假日」段落抓出 YYYY-MM-DD
-export function parseHolidays(md) {
-  const section = md.split(/^##\s*國定假日.*$/m)[1] || "";
-  return new Set(section.match(/\d{4}-\d{2}-\d{2}/g) || []);
-}
-
 const iso = (d) => d.toISOString().slice(0, 10);
 
 function todayInTaipei(now) {

@@ -15,5 +15,5 @@
 上傳任用送件（PDF、照片、Word、Excel），AI 依「分公司業務任用送件範例」逐條檢核，產出不通過說明。
 
 - 網頁：`/doc-check/`（同仁用註冊碼自行註冊；使用者看自己的紀錄，管理者看全部）
-- 檢核標準：`doc-check/worker/rules.md`
+- 檢核標準：在網頁「管理」頁維護（分公司、總公司各一套；預設值在 `doc-check/worker/rules/`）
 - 設定方式請看 [doc-check/使用說明.md](doc-check/使用說明.md)

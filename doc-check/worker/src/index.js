@@ -3,7 +3,8 @@
 // 會儲存：帳號（密碼已雜湊）、登入憑證、行事曆整理出的放假日、檢核紀錄（上傳的檔案與結果，作為歷史軌跡）、使用紀錄。
 import Anthropic from "@anthropic-ai/sdk";
 import { DurableObject } from "cloudflare:workers";
-import { SYSTEM_PROMPT, OUTPUT_SCHEMA, HOLIDAYS } from "./rules.js";
+import { systemPrompt, OUTPUT_SCHEMA, RULE_DRAFT_PROMPT, RULE_DRAFT_SCHEMA } from "./rules.js";
+import { UNITS, currentRules, saveRules, ruleHistory, ruleVersion } from "./rulesets.js";
 import { reportDateTable } from "./calendar.js";
 import { CALENDAR_PROMPT, CALENDAR_SCHEMA, cleanCalendar } from "./holidays.js";
 import { saveRecord, listRecords, getRecord, getFile, deleteRecord, addLog, checkRetention, runCleanup } from "./records.js";
@@ -77,7 +78,7 @@ async function loadCalendars(db) {
   const years = Object.values(await db.list({ prefix: "cal:" })).sort((a, b) => a.year - b.year);
   return {
     years,
-    holidays: new Set([...HOLIDAYS, ...years.flatMap((y) => y.holidays.map((h) => h.date))]),
+    holidays: new Set(years.flatMap((y) => y.holidays.map((h) => h.date))),
     workdays: new Set(years.flatMap((y) => y.workdays.map((h) => h.date))),
     coveredYears: new Set(years.map((y) => y.year)),
   };
@@ -157,18 +158,18 @@ async function handleCheck(request, env, db, user) {
   const note = typeof body.note === "string" && body.note.trim()
     ? `\n承辦人補充說明：${body.note.trim().slice(0, 2000)}`
     : "";
-  const unit = ["分公司", "總公司"].includes(body.unit)
-    ? `\n送件單位（承辦人指定）：${body.unit}`
-    : "\n送件單位：未指定，請依任用單位欄位自動判斷。";
+  if (!UNITS.includes(body.unit)) throw new UserError("請選擇送件單位（分公司或總公司）");
+  const ruleset = await currentRules(db, body.unit);
+  const unit = `\n送件單位：${body.unit}（使用${body.unit}規則第 ${ruleset.version} 版）`;
   const cal = await loadCalendars(db);
   content.push({
     type: "text",
     text: `今天日期：${taipeiToday()}。以上是這次的送件，共 ${files.length} 個檔案。請依檢核標準逐條檢核。${unit}${note}\n\n可報到日期表（每週第一個工作日、每月第一個工作日，已排除週末與國定假日；任用意見表的報到日期不在表上即不通過）：\n${reportDateTable(cal)}`,
   });
   const fileNames = files.map((f) => String(f.name || "").slice(0, 100));
-  const keep = { user, files, note: String(body.note || "").slice(0, 2000), unit: body.unit };
+  const keep = { user, files, note: String(body.note || "").slice(0, 2000), unit: body.unit, ruleVersion: ruleset.version };
   try {
-    const result = await askClaude(env, { system: SYSTEM_PROMPT, content, schema: OUTPUT_SCHEMA });
+    const result = await askClaude(env, { system: systemPrompt(body.unit, ruleset.text), content, schema: OUTPUT_SCHEMA });
     const count = (s) => result.items.filter((i) => i.status === s).length;
     const id = await saveRecord(db, { ...keep, result });
     await addLog(db, {
@@ -352,6 +353,38 @@ export default {
         await deleteRecord(db, rec);
         await addLog(db, { username: user.username, name: user.name, action: "刪除檢核紀錄", overall: `${rec.name} ${rec.time.slice(0, 10)} ${rec.result?.applicant_name || ""}`, files: rec.files.map((f) => f.name) });
         return json({ ok: true });
+      }
+      // 檢核規則（分公司／總公司），每次儲存成新版本
+      if (path === "/admin/rules" && GET) {
+        const unit = url.searchParams.get("unit");
+        const v = url.searchParams.get("version");
+        if (v !== null) {
+          const r = await ruleVersion(db, unit, v);
+          return r ? json({ rules: r }) : fail("找不到這個版本", 404);
+        }
+        return json({ rules: await currentRules(db, unit), history: await ruleHistory(db, unit) });
+      }
+      if (path === "/admin/rules" && POST) {
+        const b = await readBody(request);
+        let saved;
+        try {
+          saved = await saveRules(db, b.unit, b.text, b.note, user);
+        } catch (e) {
+          throw new UserError(e.message);
+        }
+        await addLog(db, { username: user.username, name: user.name, action: "修改檢核規則", overall: `${saved.unit}規則第 ${saved.version} 版${saved.note ? "：" + saved.note : ""}` });
+        return json({ rules: saved });
+      }
+      if (path === "/admin/rules/draft" && POST) {
+        const b = await readBody(request);
+        const cur = await currentRules(db, b.unit);
+        const { files, content } = readFiles(b);
+        content.unshift({ type: "text", text: `以下是「${cur.unit}」目前的檢核規則（第 ${cur.version} 版）：\n\n${cur.text}\n\n接下來是新的送件範例：` });
+        const note = String(b.note || "").trim().slice(0, 2000);
+        content.push({ type: "text", text: `請依新範例產生更新後的完整規則。${note ? "\n管理者說明：" + note : ""}` });
+        const draft = await askClaude(env, { system: RULE_DRAFT_PROMPT, content, schema: RULE_DRAFT_SCHEMA });
+        await addLog(db, { username: user.username, name: user.name, action: "依範例產生規則草稿", files: files.map((f) => String(f.name || "")), overall: `${cur.unit}（尚未儲存）` });
+        return json({ draft, baseVersion: cur.version });
       }
       if (path === "/admin/settings" && GET) {
         return json({

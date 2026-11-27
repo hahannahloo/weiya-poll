@@ -28,7 +28,7 @@ function summaryOf(rec) {
   };
 }
 
-export async function saveRecord(db, { user, files, note, unit, result, error }) {
+export async function saveRecord(db, { user, files, note, unit, ruleVersion, result, error }) {
   const now = Date.now();
   const id = newId(now);
   const meta = [];
@@ -41,7 +41,7 @@ export async function saveRecord(db, { user, files, note, unit, result, error })
   }
   const rec = {
     id, time: new Date(now).toISOString(), username: user.username, name: user.name,
-    note: note || "", unit: unit || "", files: meta, result: result || null,
+    note: note || "", unit: unit || "", ruleVersion: ruleVersion ?? null, files: meta, result: result || null,
     error: error ? String(error).slice(0, 300) : "",
   };
   await db.put("rec:" + id, rec);
