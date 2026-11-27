@@ -86,9 +86,12 @@ export default {
     const note = typeof body.note === "string" && body.note.trim()
       ? `\n承辦人補充說明：${body.note.trim().slice(0, 2000)}`
       : "";
+    const unit = ["分公司", "總公司"].includes(body.unit)
+      ? `\n送件單位（承辦人指定）：${body.unit}`
+      : "\n送件單位：未指定，請依任用單位欄位自動判斷。";
     content.push({
       type: "text",
-      text: `今天日期：${today}。以上是這次的送件，共 ${files.length} 個檔案。請依檢核標準逐條檢核。${note}`,
+      text: `今天日期：${today}。以上是這次的送件，共 ${files.length} 個檔案。請依檢核標準逐條檢核。${unit}${note}`,
     });
 
     const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });

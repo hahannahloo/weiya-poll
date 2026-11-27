@@ -62,7 +62,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: .95rem; }
 .files button { flex: none; border: 0; background: none; color: var(--muted); font-size: 1.3rem; cursor: pointer; padding: 4px 8px; }
 
 label.field { display: block; margin-top: 12px; font-size: .9rem; color: var(--muted); }
-textarea, input[type=password], input[type=text] {
+textarea, select, input[type=password], input[type=text] {
   width: 100%; margin-top: 4px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px;
   background: var(--bg); color: var(--text); font: inherit;
 }
@@ -145,6 +145,13 @@ details summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
     </label>
     <ul class="files" id="fileList"></ul>
 
+    <label class="field">送件單位（決定工作班別：分公司 08:00-16:30、總公司 08:00-17:00）
+      <select id="unit">
+        <option value="">自動判斷</option>
+        <option value="分公司">分公司</option>
+        <option value="總公司">總公司</option>
+      </select>
+    </label>
     <label class="field">補充說明（選填，例如：應徵者無工作經歷、特休已附假卡）
       <textarea id="note" maxlength="2000"></textarea>
     </label>
@@ -346,6 +353,7 @@ $("checkBtn").addEventListener("click", async () => {
         headers: { "content-type": "application/json", "x-access-code": code },
         body: JSON.stringify({
           note: $("note").value,
+          unit: $("unit").value,
           files: ready.map((it) => ({ name: it.file.name, kind: it.out.kind, media_type: it.out.media_type, data: it.out.data })),
         }),
       });
