@@ -210,9 +210,12 @@ table.list td.nowrap { white-space: nowrap; }
       <button class="linkbtn" data-go="password" id="navPw">改密碼</button>
       <button class="linkbtn" id="logoutBtn">登出</button>
     </div>
-    <div class="demo-note no-print" id="mockBanner" hidden style="margin-top:12px"><b>👀 介面展示版</b>：所有功能都能點，資料只存在這個瀏覽器，重新整理就重設。
-      測試帳號：管理者 <b>admin</b>／密碼 <b>admin1234</b>；一般使用者 <b>a001</b>／<b>abcd1234</b>；註冊碼 <b>demo</b>。
-      檢核時若允許使用 Claude，會真的用 AI 檢核（用你自己的 Claude 額度）；不允許則顯示範例結果。</div>
+    <div class="demo-note no-print" id="mockBanner" hidden style="margin-top:12px"><b>👀 示範介面</b>：所有功能都能點，資料只存在這個瀏覽器，重新整理就重設。檢核時若允許使用 Claude 會真的用 AI 檢核，否則顯示範例結果。
+      <div class="row-actions" style="margin-top:8px">切換身分：
+        <button class="linkbtn" type="button" data-as="admin">管理者看到的畫面</button>
+        <button class="linkbtn" type="button" data-as="a001">一般使用者看到的畫面</button>
+        <button class="linkbtn" type="button" data-as="">登入畫面</button>
+      </div></div>
   </header>
 
   <!-- 登入 -->
@@ -1667,7 +1670,26 @@ $("logRefresh").addEventListener("click", loadLogs);
 // ===== 啟動 =====
 async function init() {
   setStep(1);
-  if (window.MOCK_SEED) window.MOCK_SEED(DEMO_RESULT);
+  if (window.MOCK_SEED) {
+    window.MOCK_SEED(DEMO_RESULT);
+    // 示範介面：打開就直接以管理者身分進入，不用先登入
+    const asUser = async (u) => {
+      store.set(TOKEN_KEY, "");
+      me = null;
+      clearWorkspace();
+      if (u) {
+        const d = await api("/login", { username: u, password: u === "admin" ? "admin1234" : "abcd1234" });
+        store.set(TOKEN_KEY, d.token);
+        me = d.user;
+      }
+      history.replaceState(null, "", location.pathname + location.search);
+      document.querySelectorAll("[data-as]").forEach((b) => b.classList.toggle("on", b.dataset.as === u));
+      route();
+      loadChecklist();
+    };
+    document.querySelectorAll("[data-as]").forEach((b) => b.addEventListener("click", () => asUser(b.dataset.as)));
+    await asUser("admin");
+  }
   $("unit").value = store.get("docCheckUnit");
   if (CONFIG.apiUrl && store.get(TOKEN_KEY)) {
     try { me = (await api("/me")).user; } catch { me = null; }
