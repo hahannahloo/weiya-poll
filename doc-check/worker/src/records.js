@@ -24,7 +24,7 @@ function summaryOf(rec) {
     id: rec.id, time: rec.time, username: rec.username, name: rec.name,
     applicant: r?.applicant_name || "", overall: r ? r.overall : "error",
     fail: count("fail"), warn: count("warn"), fileCount: rec.files.length,
-    error: rec.error || "", override: !!rec.override, submittedAt: rec.submittedAt || null,
+    error: rec.error || "", submittedAt: rec.submittedAt || null,
   };
 }
 
@@ -178,14 +178,19 @@ export async function markSubmitted(db, rec, user) {
   return updated;
 }
 
-// 例外放行（只有管理者）：審核不通過，但經核准仍可繼續列印、交回人資
-export async function overrideRecord(db, rec, user, reason) {
-  const override = { at: new Date().toISOString(), by: user.name, username: user.username, reason };
-  const updated = { ...rec, override };
+// 步驟 4 前：承辦人逐項確認「需確認」的項目（例如非標準班別是核准的例外）
+export const warnItems = (rec) => (rec.result?.items || []).filter((i) => i.status === "warn");
+
+export async function confirmWarnings(db, rec, user, ruleIds) {
+  const want = warnItems(rec);
+  const got = new Set((ruleIds || []).map(String));
+  const missing = want.filter((i) => !got.has(i.rule_id));
+  if (missing.length) throw new Error("還有需確認的項目沒有勾選：" + missing.map((i) => i.rule_id).join("、"));
+  const confirmations = {
+    at: new Date().toISOString(), by: user.name, username: user.username,
+    items: want.map((i) => ({ rule_id: i.rule_id, rule: i.rule, finding: i.finding })),
+  };
+  const updated = { ...rec, confirmations };
   await db.put("rec:" + rec.id, updated);
-  for (const key of ["sum:" + rec.id, `usum:${rec.username}:${rec.id}`]) {
-    const sum = await db.get(key);
-    if (sum) await db.put(key, { ...sum, override: true });
-  }
   return updated;
 }
