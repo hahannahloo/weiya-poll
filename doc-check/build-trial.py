@@ -1,4 +1,4 @@
-"""產生「試用版」預覽頁：不需要伺服器，直接在 claude.ai 預覽頁用 Claude 檢核。
+"""產生「介面展示版」預覽頁：不需要伺服器，用瀏覽器裡的假伺服器展示登入、紀錄、管理等畫面，檢核可直接用 Claude。
 
 把伺服器端的規則全文、AI 指示、輸出格式、可報到日期計算與防漏檢查一起打包進網頁，
 確保試用版和正式版用的是同一套規則與邏輯。
@@ -41,13 +41,16 @@ bundle = "\n".join([
     "return { reportDateTable, ensureCoverage, systemPrompt, OUTPUT_SCHEMA, checklistOf, RULES };",
     "})();",
     "</script>",
+    "<script>",
+    (here / "demo" / "mock-api.js").read_text(encoding="utf-8"),
+    "</script>",
 ])
 
 page = (here / "index.html").read_text(encoding="utf-8")
 # 預覽頁會自動包上 <html><head><body>，這裡拿掉自己的外框
 for pattern in [r"<!doctype html>\n", r"<html[^>]*>\n", r"</?head>\n", r"</?body>\n", r"</html>\n?",
                 r'<meta charset="utf-8">\n', r'<meta name="viewport"[^>]*>\n']:
-    page = re.sub(pattern, "", page, count=1, flags=re.I)
+    page = re.sub(pattern, "", page, flags=re.I)
 page = page.replace("<script>\n// ===== 設定 =====", bundle + "\n<script>\n// ===== 設定 =====", 1)
 assert "const TRIAL" in page, "找不到插入位置"
 Path(sys.argv[1]).write_text(page, encoding="utf-8")

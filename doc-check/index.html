@@ -210,6 +210,9 @@ table.list td.nowrap { white-space: nowrap; }
       <button class="linkbtn" data-go="password" id="navPw">改密碼</button>
       <button class="linkbtn" id="logoutBtn">登出</button>
     </div>
+    <div class="demo-note no-print" id="mockBanner" hidden style="margin-top:12px"><b>👀 介面展示版</b>：所有功能都能點，資料只存在這個瀏覽器，重新整理就重設。
+      測試帳號：管理者 <b>admin</b>／密碼 <b>admin1234</b>；一般使用者 <b>a001</b>／<b>abcd1234</b>；註冊碼 <b>demo</b>。
+      檢核時若允許使用 Claude，會真的用 AI 檢核（用你自己的 Claude 額度）；不允許則顯示範例結果。</div>
   </header>
 
   <!-- 登入 -->
@@ -429,6 +432,8 @@ const CONFIG = {
   apiUrl: "",
 };
 
+if (window.MOCK_API) CONFIG.apiUrl = "mock:"; // 介面展示版
+
 const MAX_TOTAL_MB = 28;          // 全部檔案轉換後的總大小上限
 const IMAGE_MAX_EDGE = 2400;      // 照片長邊縮到這個像素，省流量又看得清楚
 const LIBS = {
@@ -604,6 +609,11 @@ let checking = false;
 let trialSample = null; // 試用版：預覽頁直接呼叫 Claude（沒有伺服器時）
 const trialMode = () => !CONFIG.apiUrl && !!trialSample;
 function showMode() {
+  if (window.MOCK_API) {
+    $("mockBanner").hidden = false;
+    if (!checking) $("checkBtn").textContent = trialSample ? "開始檢核（用 AI）" : "開始檢核（範例結果）";
+    return;
+  }
   if (CONFIG.apiUrl) return;
   $("trialBanner").hidden = !trialSample;
   $("demoBanner").hidden = !!trialSample;
@@ -774,6 +784,10 @@ $("checkBtn").addEventListener("click", async () => {
     } else if (!CONFIG.apiUrl) {
       await new Promise((r) => setTimeout(r, 1500));
       result = DEMO_RESULT;
+    } else if (window.MOCK_API) {
+      clearInterval(tick);
+      const r = trialSample ? await trialCheck(ready, $("unit").value, $("note").value.trim()) : DEMO_RESULT;
+      result = await api("/check", { note: $("note").value, unit: $("unit").value, files: ready.flatMap((it) => payloadOf(it.file.name, it.out)), mockResult: r });
     } else {
       result = await api("/check", {
         note: $("note").value,
@@ -801,7 +815,7 @@ $("checkBtn").addEventListener("click", async () => {
   } finally {
     clearInterval(tick);
     checking = false;
-    btn.textContent = CONFIG.apiUrl ? "開始檢核" : trialSample ? "開始檢核（試用版）" : "查看示範結果（尚未連上檢核伺服器）";
+    btn.textContent = window.MOCK_API ? (trialSample ? "開始檢核（用 AI）" : "開始檢核（範例結果）") : CONFIG.apiUrl ? "開始檢核" : trialSample ? "開始檢核（試用版）" : "查看示範結果（尚未連上檢核伺服器）";
     renderFiles();
   }
 });
@@ -1135,17 +1149,25 @@ const TOKEN_KEY = "docCheckToken";
 
 // 呼叫伺服器：自動帶上登入憑證；body 有值就用 POST
 async function api(path, body) {
-  let res;
-  try {
-    res = await fetch(CONFIG.apiUrl.replace(/\/$/, "") + path, {
-      method: body === undefined ? "GET" : "POST",
-      headers: { "content-type": "application/json", authorization: "Bearer " + store.get(TOKEN_KEY) },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-  } catch {
-    throw new Error("連不到檢核伺服器，請檢查網路");
+  let status, data;
+  if (window.MOCK_API) {
+    // 介面展示版：用瀏覽器裡的假伺服器
+    ({ status, data } = await window.MOCK_API(path, body, store.get(TOKEN_KEY)));
+  } else {
+    let res;
+    try {
+      res = await fetch(CONFIG.apiUrl.replace(/\/$/, "") + path, {
+        method: body === undefined ? "GET" : "POST",
+        headers: { "content-type": "application/json", authorization: "Bearer " + store.get(TOKEN_KEY) },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+    } catch {
+      throw new Error("連不到檢核伺服器，請檢查網路");
+    }
+    status = res.status;
+    data = await res.json().catch(() => ({ error: `伺服器回應異常（${res.status}）` }));
   }
-  const data = await res.json().catch(() => ({ error: `伺服器回應異常（${res.status}）` }));
+  const res = { status, ok: status < 400 };
   if (res.status === 401 && path !== "/login" && path !== "/password") {
     store.set(TOKEN_KEY, "");
     me = null;
@@ -1645,13 +1667,14 @@ $("logRefresh").addEventListener("click", loadLogs);
 // ===== 啟動 =====
 async function init() {
   setStep(1);
+  if (window.MOCK_SEED) window.MOCK_SEED(DEMO_RESULT);
   $("unit").value = store.get("docCheckUnit");
   if (CONFIG.apiUrl && store.get(TOKEN_KEY)) {
     try { me = (await api("/me")).user; } catch { me = null; }
   }
   route();
   loadChecklist();
-  if (!CONFIG.apiUrl && typeof TRIAL !== "undefined" && window.claude?.use) {
+  if ((!CONFIG.apiUrl || window.MOCK_API) && typeof TRIAL !== "undefined" && window.claude?.use) {
     trialSample = await window.claude.use("sample").catch(() => null);
     showMode();
     loadChecklist();
