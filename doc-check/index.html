@@ -119,6 +119,25 @@ details summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
 .muted { color: var(--muted); font-size: .85rem; }
 .demo-note { margin-top: 16px; padding: 10px 12px; border-radius: 10px; background: var(--warn-soft); color: var(--warn); font-size: .9rem; }
 
+.userbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; font-size: .92rem; }
+.userbar .who { flex: 1 1 auto; min-width: 0; color: var(--muted); }
+.userbar .who b { color: var(--text); }
+.linkbtn { border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 999px; padding: 5px 12px; font: inherit; font-size: .88rem; cursor: pointer; }
+.linkbtn.on { background: var(--brand); border-color: var(--brand); color: #fff; }
+.linkbtn.danger { color: var(--fail); }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0 12px; }
+.check-row { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: .92rem; }
+.tablewrap { overflow-x: auto; margin-top: 10px; }
+table.list { width: 100%; border-collapse: collapse; font-size: .88rem; }
+table.list th, table.list td { text-align: left; padding: 8px 6px; border-top: 1px solid var(--line); vertical-align: top; }
+table.list th { color: var(--muted); font-weight: 600; white-space: nowrap; }
+table.list td.nowrap { white-space: nowrap; }
+.ok-msg { margin-top: 10px; color: var(--pass); font-size: .92rem; }
+.row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.urow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.urow .info { flex: 1 1 200px; min-width: 0; }
+.urow .meta { color: var(--muted); font-size: .85rem; }
+
 @media print {
   body { background: #fff; color: #000; }
   .no-print { display: none !important; }
@@ -133,7 +152,40 @@ details summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
   <header>
     <h1>任用送件檢核</h1>
     <p>上傳新進人員的任用送件（文件 1～7），AI 會依「分公司業務任用送件範例」逐條檢查，列出不通過的地方和修正方式。</p>
+    <div class="userbar no-print" id="userBar" hidden>
+      <span class="who" id="whoAmI"></span>
+      <button class="linkbtn" data-go="check" id="navCheck">檢核</button>
+      <button class="linkbtn" data-go="admin" id="navAdmin" hidden>管理</button>
+      <button class="linkbtn" data-go="password" id="navPw">改密碼</button>
+      <button class="linkbtn" id="logoutBtn">登出</button>
+    </div>
   </header>
+
+  <!-- 登入 -->
+  <section class="card" id="loginView" hidden>
+    <h2>登入</h2>
+    <form id="loginForm">
+      <label class="field">帳號<input type="text" id="loginUser" autocomplete="username" autocapitalize="off" required></label>
+      <label class="field">密碼<input type="password" id="loginPw" autocomplete="current-password" required></label>
+      <button class="btn block" type="submit" id="loginBtn">登入</button>
+    </form>
+    <div class="error" id="loginErr" hidden></div>
+    <p class="muted" style="margin-top:12px">沒有帳號或忘記密碼，請洽管理者。</p>
+  </section>
+
+  <!-- 改密碼 -->
+  <section class="card" id="passwordView" hidden>
+    <h2>修改密碼</h2>
+    <form id="pwForm">
+      <label class="field">目前的密碼<input type="password" id="pwOld" autocomplete="current-password" required></label>
+      <label class="field">新密碼（至少 8 個字元）<input type="password" id="pwNew" autocomplete="new-password" minlength="8" required></label>
+      <label class="field">再輸入一次新密碼<input type="password" id="pwNew2" autocomplete="new-password" minlength="8" required></label>
+      <button class="btn block" type="submit">更新密碼</button>
+    </form>
+    <div class="error" id="pwErr" hidden></div>
+  </section>
+
+  <div id="checkView">
 
   <div class="demo-note no-print" id="demoBanner" hidden><b>⚠ 示範模式：還沒有連上檢核伺服器。</b>現在上傳的檔案不會被檢查，按下按鈕只會顯示一份固定的範例結果。部署伺服器並設定網址後，才會真的檢核。</div>
 
@@ -157,9 +209,6 @@ details summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
     <label class="field">補充說明（選填，例如：應徵者無工作經歷、特休已附假卡）
       <textarea id="note" maxlength="2000"></textarea>
     </label>
-    <label class="field" id="codeField">存取密碼
-      <input type="password" id="accessCode" autocomplete="current-password" placeholder="管理者設定的密碼">
-    </label>
 
     <button class="btn block" id="checkBtn" disabled>開始檢核</button>
     <div class="status" id="status"></div>
@@ -167,6 +216,32 @@ details summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
   </section>
 
   <div id="result"></div>
+  </div>
+
+  <!-- 管理（只有管理者看得到） -->
+  <div id="adminView" hidden>
+  <section class="card">
+    <h2>👥 帳號管理</h2>
+    <form id="userForm">
+      <div class="form-grid">
+        <label class="field">帳號（英數字，如員編）<input type="text" id="uName" autocapitalize="off" required></label>
+        <label class="field">姓名<input type="text" id="uDisplay" maxlength="30" required></label>
+        <label class="field">權限
+          <select id="uRole"><option value="user">一般使用者（只能檢核）</option><option value="admin">管理者（可管理帳號、行事曆、看紀錄）</option></select>
+        </label>
+        <label class="field" id="uPwLabel">密碼（至少 8 個字元）<input type="text" id="uPw" autocomplete="off"></label>
+      </div>
+      <label class="check-row"><input type="checkbox" id="uActive" checked> 啟用（取消勾選 = 停用，這個人將無法登入）</label>
+      <div class="row" style="margin-top:12px">
+        <button class="btn" type="submit" id="uSubmit">新增帳號</button>
+        <button class="btn ghost" type="button" id="uCancel" hidden>取消編輯</button>
+      </div>
+    </form>
+    <div class="error" id="uErr" hidden></div>
+    <div class="ok-msg" id="uOk" hidden></div>
+    <div id="userTable" style="margin-top:10px"></div>
+    <p class="muted">內建帳號 <b>admin</b> 的密碼在 Cloudflare 的 ADMIN_PASSWORD 設定，不會列在這裡。</p>
+  </section>
 
   <section class="card no-print" id="calCard">
     <h2>📅 國定假日行事曆</h2>
@@ -178,6 +253,14 @@ details summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
     </label>
     <div class="status" id="calMsg" style="text-align:left"></div>
   </section>
+
+  <section class="card">
+    <h2>📝 使用紀錄</h2>
+    <p class="muted" style="margin:0">最近 200 筆。只記錄誰、什麼時候、檔名和結果，不保存檔案內容。</p>
+    <div class="row" style="margin-top:10px"><button class="btn ghost" id="logRefresh" type="button">重新整理</button></div>
+    <div class="tablewrap"><table class="list" id="logTable"></table></div>
+  </section>
+  </div>
 </div>
 
 <script>
@@ -335,9 +418,7 @@ drop.addEventListener("drop", (e) => addFiles(e.dataTransfer.files));
 
 // ===== 檢核 =====
 let checking = false;
-$("accessCode").value = store.get("docCheckCode");
 if (!CONFIG.apiUrl) {
-  $("codeField").hidden = true;
   $("checkBtn").textContent = "查看示範結果（尚未連上檢核伺服器）";
   $("demoBanner").hidden = false;
 }
@@ -363,20 +444,11 @@ $("checkBtn").addEventListener("click", async () => {
       await new Promise((r) => setTimeout(r, 1500));
       result = DEMO_RESULT;
     } else {
-      const code = $("accessCode").value.trim();
-      store.set("docCheckCode", code);
-      const res = await fetch(CONFIG.apiUrl.replace(/\/$/, "") + "/check", {
-        method: "POST",
-        headers: { "content-type": "application/json", "x-access-code": code },
-        body: JSON.stringify({
-          note: $("note").value,
-          unit: $("unit").value,
-          files: ready.map((it) => ({ name: it.file.name, kind: it.out.kind, media_type: it.out.media_type, data: it.out.data })),
-        }),
+      result = await api("/check", {
+        note: $("note").value,
+        unit: $("unit").value,
+        files: ready.map((it) => ({ name: it.file.name, kind: it.out.kind, media_type: it.out.media_type, data: it.out.data })),
       });
-      const data = await res.json().catch(() => ({ error: `伺服器回應異常（${res.status}）` }));
-      if (!res.ok || data.error) throw new Error(data.error || `伺服器錯誤（${res.status}）`);
-      result = data;
     }
     renderResult(result, !CONFIG.apiUrl);
     $("status").textContent = "";
@@ -509,15 +581,8 @@ function calYearHtml(y, open) {
 }
 
 async function loadCalendar() {
-  if (!CONFIG.apiUrl) {
-    $("calList").innerHTML = '<p class="muted">連上檢核伺服器後才能上傳行事曆。</p>';
-    $("calBtn").hidden = true;
-    return;
-  }
-  $("calBtn").hidden = false;
   try {
-    const res = await fetch(CONFIG.apiUrl.replace(/\/$/, "") + "/calendar");
-    const { years } = await res.json();
+    const { years } = await api("/calendar");
     $("calList").innerHTML = years.length
       ? years.map((y) => calYearHtml(y, false)).join("")
       : '<p class="muted">⚠ 還沒有上傳任何年度的行事曆，報到日期只會排除週末。</p>';
@@ -539,28 +604,244 @@ $("calInput").addEventListener("change", async (e) => {
       const out = await convert(f);
       files.push({ name: f.name, kind: out.kind, media_type: out.media_type, data: out.data });
     }
-    const code = $("accessCode").value.trim();
-    store.set("docCheckCode", code);
-    const res = await fetch(CONFIG.apiUrl.replace(/\/$/, "") + "/calendar", {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-access-code": code },
-      body: JSON.stringify({ files }),
-    });
-    const data = await res.json().catch(() => ({ error: `伺服器回應異常（${res.status}）` }));
-    if (!res.ok || data.error) throw new Error(data.error || `伺服器錯誤（${res.status}）`);
+    const data = await api("/calendar", { files });
     msg.innerHTML = `✅ 已更新 ${data.saved.map((y) => y.year + " 年").join("、")}，請核對下面的日期是否正確：`
       + data.saved.map((y) => calYearHtml(y, true)).join("")
       + (data.notes ? `<p class="muted">AI 備註：${esc(data.notes)}</p>` : "");
     loadCalendar();
   } catch (err) {
-    msg.textContent = "上傳失敗：" + (err.message === "Failed to fetch" ? "連不到檢核伺服器" : err.message)
-      + "（需要先在上方輸入存取密碼）";
+    msg.textContent = "上傳失敗：" + err.message;
   } finally {
     $("calBtn").hidden = false;
   }
 });
 
-loadCalendar();
+// ===== 登入與權限 =====
+let me = null;
+const TOKEN_KEY = "docCheckToken";
+
+// 呼叫伺服器：自動帶上登入憑證；body 有值就用 POST
+async function api(path, body) {
+  let res;
+  try {
+    res = await fetch(CONFIG.apiUrl.replace(/\/$/, "") + path, {
+      method: body === undefined ? "GET" : "POST",
+      headers: { "content-type": "application/json", authorization: "Bearer " + store.get(TOKEN_KEY) },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch {
+    throw new Error("連不到檢核伺服器，請檢查網路");
+  }
+  const data = await res.json().catch(() => ({ error: `伺服器回應異常（${res.status}）` }));
+  if (res.status === 401 && path !== "/login" && path !== "/password") {
+    store.set(TOKEN_KEY, "");
+    me = null;
+    route();
+    throw new Error("登入已過期，請重新登入");
+  }
+  if (!res.ok || data.error) throw new Error(data.error || `伺服器錯誤（${res.status}）`);
+  return data;
+}
+
+function showError(id, msg) {
+  $(id).textContent = msg;
+  $(id).hidden = !msg;
+}
+
+// 依登入狀態與網址 #admin / #password 顯示畫面
+function route() {
+  const views = { login: "loginView", check: "checkView", admin: "adminView", password: "passwordView" };
+  let view = "check";
+  if (CONFIG.apiUrl && !me) view = "login";
+  else if (location.hash === "#admin" && me?.role === "admin") view = "admin";
+  else if (location.hash === "#password" && me) view = "password";
+  for (const [k, id] of Object.entries(views)) $(id).hidden = k !== view;
+  $("userBar").hidden = !me;
+  if (me) {
+    $("whoAmI").innerHTML = `<b>${esc(me.name)}</b>（${esc(me.roleName)}）`;
+    $("navAdmin").hidden = me.role !== "admin";
+    ["navCheck", "navAdmin", "navPw"].forEach((id) => $(id).classList.toggle("on", $(id).dataset.go === view));
+  }
+  if (view === "admin") { loadUsers(); loadCalendar(); loadLogs(); }
+  if (view === "login") setTimeout(() => $("loginUser").focus(), 0);
+}
+
+document.querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => {
+  const go = b.dataset.go;
+  if (go === "check") history.replaceState(null, "", location.pathname + location.search);
+  else location.hash = go;
+  route();
+}));
+window.addEventListener("hashchange", route);
+
+$("loginForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  showError("loginErr", "");
+  $("loginBtn").disabled = true;
+  try {
+    const data = await api("/login", { username: $("loginUser").value.trim(), password: $("loginPw").value });
+    store.set(TOKEN_KEY, data.token);
+    me = data.user;
+    $("loginPw").value = "";
+    route();
+  } catch (err) {
+    showError("loginErr", err.message);
+  } finally {
+    $("loginBtn").disabled = false;
+  }
+});
+
+$("logoutBtn").addEventListener("click", async () => {
+  try { await api("/logout", {}); } catch {}
+  store.set(TOKEN_KEY, "");
+  me = null;
+  history.replaceState(null, "", location.pathname + location.search);
+  route();
+});
+
+$("pwForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  showError("pwErr", "");
+  if ($("pwNew").value !== $("pwNew2").value) return showError("pwErr", "兩次輸入的新密碼不一樣");
+  try {
+    await api("/password", { oldPassword: $("pwOld").value, newPassword: $("pwNew").value });
+    ["pwOld", "pwNew", "pwNew2"].forEach((id) => ($(id).value = ""));
+    store.set(TOKEN_KEY, "");
+    me = null;
+    history.replaceState(null, "", location.pathname + location.search);
+    route();
+    showError("loginErr", "密碼已更新，請用新密碼重新登入。");
+  } catch (err) {
+    showError("pwErr", err.message);
+  }
+});
+
+// ===== 帳號管理 =====
+let users = [];
+let editing = null; // 正在編輯的帳號
+let confirmDelete = null;
+
+function resetUserForm() {
+  editing = null;
+  $("userForm").reset();
+  $("uName").disabled = false;
+  $("uActive").checked = true;
+  $("uPwLabel").firstChild.textContent = "密碼（至少 8 個字元）";
+  $("uSubmit").textContent = "新增帳號";
+  $("uCancel").hidden = true;
+}
+
+function renderUsers() {
+  const fmt = (t) => (t ? new Date(t).toLocaleString("zh-TW", { dateStyle: "short", timeStyle: "short" }) : "—");
+  $("userTable").innerHTML = users.length ? users.map((u) => `<div class="urow">
+      <div class="info"><b>${esc(u.name)}</b>　${esc(u.username)}
+        <div class="meta">${esc(u.roleName)} · ${u.active ? '<span class="chip pass">啟用</span>' : '<span class="chip na">停用</span>'} · 最後登入 ${fmt(u.lastLogin)}</div></div>
+      <div class="row-actions">
+        <button class="linkbtn" data-edit="${esc(u.username)}">編輯</button>
+        <button class="linkbtn danger" data-del="${esc(u.username)}">${confirmDelete === u.username ? "確定刪除？" : "刪除"}</button>
+      </div></div>`).join("")
+    : '<p class="muted">還沒有任何帳號。用上面的表單新增第一個。</p>';
+}
+
+async function loadUsers() {
+  try {
+    users = (await api("/admin/users")).users;
+    renderUsers();
+  } catch (err) {
+    showError("uErr", err.message);
+  }
+}
+
+$("userTable").addEventListener("click", async (e) => {
+  const edit = e.target.dataset.edit, del = e.target.dataset.del;
+  if (edit) {
+    const u = users.find((x) => x.username === edit);
+    editing = u.username;
+    $("uName").value = u.username;
+    $("uName").disabled = true;
+    $("uDisplay").value = u.name;
+    $("uRole").value = u.role;
+    $("uActive").checked = u.active;
+    $("uPw").value = "";
+    $("uPwLabel").firstChild.textContent = "重設密碼（不改請留空）";
+    $("uSubmit").textContent = "儲存修改";
+    $("uCancel").hidden = false;
+    $("userForm").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  if (del) {
+    if (confirmDelete !== del) {
+      confirmDelete = del;
+      renderUsers();
+      return;
+    }
+    confirmDelete = null;
+    try {
+      await api("/admin/users/delete", { username: del });
+      $("uOk").textContent = `已刪除帳號 ${del}`;
+      $("uOk").hidden = false;
+      if (editing === del) resetUserForm();
+      loadUsers();
+    } catch (err) {
+      showError("uErr", err.message);
+    }
+  }
+});
+
+$("uCancel").addEventListener("click", resetUserForm);
+
+$("userForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  showError("uErr", "");
+  $("uOk").hidden = true;
+  const create = !editing;
+  try {
+    const { user } = await api("/admin/users", {
+      create,
+      username: create ? $("uName").value.trim() : editing,
+      name: $("uDisplay").value.trim(),
+      role: $("uRole").value,
+      active: $("uActive").checked,
+      password: $("uPw").value,
+    });
+    $("uOk").textContent = create
+      ? `已新增帳號 ${user.username}。請把帳號和密碼告訴 ${user.name}，並請對方登入後自行修改密碼。`
+      : `已更新 ${user.username}${$("uPw").value ? "，密碼已重設，對方需要用新密碼重新登入" : ""}。`;
+    $("uOk").hidden = false;
+    resetUserForm();
+    loadUsers();
+  } catch (err) {
+    showError("uErr", err.message);
+  }
+});
+
+// ===== 使用紀錄 =====
+const LOG_RESULT = { pass: "全部通過", warn: "需確認", fail: "不通過", error: "失敗" };
+async function loadLogs() {
+  try {
+    const { logs } = await api("/admin/logs");
+    $("logTable").innerHTML = `<tr><th>時間</th><th>使用者</th><th>動作</th><th>內容／結果</th><th>檔案</th></tr>`
+      + (logs.length ? logs.map((l) => {
+        let result = esc(LOG_RESULT[l.overall] || l.overall || "");
+        if (l.action === "檢核" && l.overall !== "error") result = `${esc(l.applicant || "")}：<span class="chip ${esc(l.overall)}">${result}</span> 不通過 ${l.fail ?? 0}、需確認 ${l.warn ?? 0}`;
+        if (l.error) result += `<div class="muted">${esc(l.error)}</div>`;
+        return `<tr><td class="nowrap">${new Date(l.time).toLocaleString("zh-TW", { dateStyle: "short", timeStyle: "short" })}</td>
+          <td class="nowrap">${esc(l.name)}</td><td class="nowrap">${esc(l.action)}</td><td>${result}</td>
+          <td class="muted">${esc((l.files || []).join("、"))}</td></tr>`;
+      }).join("") : `<tr><td colspan="5" class="muted">還沒有紀錄。</td></tr>`);
+  } catch (err) {
+    $("logTable").innerHTML = `<tr><td class="muted">${esc(err.message)}</td></tr>`;
+  }
+}
+$("logRefresh").addEventListener("click", loadLogs);
+
+// ===== 啟動 =====
+async function init() {
+  if (CONFIG.apiUrl && store.get(TOKEN_KEY)) {
+    try { me = (await api("/me")).user; } catch { me = null; }
+  }
+  route();
+}
+init();
 renderFiles();
 </script>
 </body>
