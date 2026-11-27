@@ -1,3 +1,4 @@
 weiya-poll.zip
 node_modules/
 .wrangler/
+.dev.vars

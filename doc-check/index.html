@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>任用送件檢核</title>
+<style>
+:root {
+  --bg: #f5f6f8; --card: #ffffff; --text: #1d2430; --muted: #667085; --line: #e3e6eb;
+  --brand: #b3261e; --brand-soft: #fbeceb;
+  --pass: #16794a; --pass-soft: #e6f4ec;
+  --fail: #c62828; --fail-soft: #fdecec;
+  --warn: #a15c00; --warn-soft: #fff4e0;
+  --na: #667085; --na-soft: #eff1f4;
+  --shadow: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.08);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12151a; --card: #1b1f26; --text: #e7eaee; --muted: #98a2b3; --line: #2c323c;
+    --brand: #ef6b63; --brand-soft: #3a1f1e;
+    --pass: #4cc38a; --pass-soft: #16301f; --fail: #f2706a; --fail-soft: #3a1c1c;
+    --warn: #f0b450; --warn-soft: #3a2c12; --na: #98a2b3; --na-soft: #262b33;
+    --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12151a; --card: #1b1f26; --text: #e7eaee; --muted: #98a2b3; --line: #2c323c;
+  --brand: #ef6b63; --brand-soft: #3a1f1e;
+  --pass: #4cc38a; --pass-soft: #16301f; --fail: #f2706a; --fail-soft: #3a1c1c;
+  --warn: #f0b450; --warn-soft: #3a2c12; --na: #98a2b3; --na-soft: #262b33;
+  --shadow: none;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 16px/1.6 -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", sans-serif;
+}
+.wrap { max-width: 760px; margin: 0 auto; padding: 20px 16px 60px; }
+header h1 { margin: 0; font-size: 1.5rem; }
+header p { margin: 4px 0 0; color: var(--muted); font-size: .95rem; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-top: 16px; box-shadow: var(--shadow); }
+.card h2 { margin: 0 0 10px; font-size: 1.05rem; }
+
+.drop {
+  display: block; border: 2px dashed var(--line); border-radius: 12px; padding: 26px 16px;
+  text-align: center; cursor: pointer; transition: border-color .15s, background .15s;
+}
+.drop:hover, .drop.over { border-color: var(--brand); background: var(--brand-soft); }
+.drop strong { display: block; font-size: 1.05rem; }
+.drop span { color: var(--muted); font-size: .88rem; }
+.drop input { display: none; }
+
+.files { list-style: none; margin: 12px 0 0; padding: 0; }
+.files li { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+.files .icon { flex: none; width: 34px; height: 34px; border-radius: 8px; background: var(--na-soft); display: grid; place-items: center; font-size: .72rem; font-weight: 700; color: var(--muted); overflow: hidden; }
+.files .icon img { width: 100%; height: 100%; object-fit: cover; }
+.files .meta { flex: 1; min-width: 0; }
+.files .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.files .sub { color: var(--muted); font-size: .8rem; }
+.files .sub.err { color: var(--fail); }
+.files button { flex: none; border: 0; background: none; color: var(--muted); font-size: 1.3rem; cursor: pointer; padding: 4px 8px; }
+
+label.field { display: block; margin-top: 12px; font-size: .9rem; color: var(--muted); }
+textarea, input[type=password], input[type=text] {
+  width: 100%; margin-top: 4px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--bg); color: var(--text); font: inherit;
+}
+textarea { min-height: 64px; resize: vertical; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  border: 0; border-radius: 12px; padding: 12px 18px; font: inherit; font-weight: 600; cursor: pointer;
+  background: var(--brand); color: #fff;
+}
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn.ghost { background: var(--card); color: var(--text); border: 1px solid var(--line); }
+.btn.block { width: 100%; margin-top: 16px; font-size: 1.05rem; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; }
+.row .btn { flex: 1 1 140px; }
+
+.status { margin-top: 12px; text-align: center; color: var(--muted); font-size: .92rem; }
+.spinner { width: 18px; height: 18px; border: 3px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.error { margin-top: 12px; padding: 12px; border-radius: 10px; background: var(--fail-soft); color: var(--fail); }
+
+.banner { border-radius: 14px; padding: 18px 16px; margin-top: 16px; }
+.banner.fail { background: var(--fail-soft); color: var(--fail); }
+.banner.warn { background: var(--warn-soft); color: var(--warn); }
+.banner.pass { background: var(--pass-soft); color: var(--pass); }
+.banner .big { font-size: 1.35rem; font-weight: 700; }
+.banner .who { color: var(--text); margin-top: 2px; }
+.banner .line { color: var(--text); margin-top: 6px; }
+.counts { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.chip { border-radius: 999px; padding: 3px 10px; font-size: .85rem; font-weight: 600; }
+.chip.fail { background: var(--fail-soft); color: var(--fail); }
+.chip.warn { background: var(--warn-soft); color: var(--warn); }
+.chip.pass { background: var(--pass-soft); color: var(--pass); }
+.chip.na { background: var(--na-soft); color: var(--na); }
+.banner .chip { background: var(--card); }
+
+.docs { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.doc { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font-size: .88rem; }
+.doc b { display: block; }
+.doc.missing { border-color: var(--fail); background: var(--fail-soft); }
+.doc .src { color: var(--muted); font-size: .78rem; }
+
+.item { border-top: 1px solid var(--line); padding: 12px 0; }
+.item:first-of-type { border-top: 0; }
+.item .head { display: flex; gap: 8px; align-items: flex-start; }
+.item .head .chip { flex: none; margin-top: 1px; }
+.item .rule { font-weight: 600; }
+.item .doc-name { color: var(--muted); font-size: .82rem; }
+.item dl { margin: 8px 0 0; display: grid; grid-template-columns: 3.2em 1fr; gap: 4px 8px; font-size: .92rem; }
+.item dt { color: var(--muted); }
+.item dd { margin: 0; }
+.item dd.fix { font-weight: 600; }
+details summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
+.muted { color: var(--muted); font-size: .85rem; }
+.demo-note { margin-top: 16px; padding: 10px 12px; border-radius: 10px; background: var(--warn-soft); color: var(--warn); font-size: .9rem; }
+
+@media print {
+  body { background: #fff; color: #000; }
+  .no-print { display: none !important; }
+  .card, .banner { box-shadow: none; break-inside: avoid-page; }
+  details { display: block; } details > summary { display: none; }
+  details:not([open]) > *:not(summary) { display: block; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>任用送件檢核</h1>
+    <p>上傳新進人員的任用送件（文件 1～7），AI 會依「分公司業務任用送件範例」逐條檢查，列出不通過的地方和修正方式。</p>
+  </header>
+
+  <section class="card no-print" id="uploadCard">
+    <h2>1. 上傳文件</h2>
+    <label class="drop" id="drop">
+      <input type="file" id="fileInput" multiple
+        accept=".pdf,.jpg,.jpeg,.png,.webp,.gif,.heic,.heif,.docx,.xlsx,.xls,.csv,.txt,application/pdf,image/*">
+      <strong>點這裡選擇檔案，或拖拉到這裡</strong>
+      <span>PDF、照片（JPG／PNG／HEIC）、Word、Excel 都可以，一次可上傳多個</span>
+    </label>
+    <ul class="files" id="fileList"></ul>
+
+    <label class="field">補充說明（選填，例如：應徵者無工作經歷、特休已附假卡）
+      <textarea id="note" maxlength="2000"></textarea>
+    </label>
+    <label class="field" id="codeField">存取密碼
+      <input type="password" id="accessCode" autocomplete="current-password" placeholder="管理者設定的密碼">
+    </label>
+
+    <button class="btn block" id="checkBtn" disabled>開始檢核</button>
+    <div class="status" id="status"></div>
+    <div class="error" id="error" hidden></div>
+  </section>
+
+  <div id="result"></div>
+</div>
+
+<script>
+// ===== 設定 =====
+const CONFIG = {
+  // Cloudflare 檢核伺服器網址（部署後填入，例如 https://doc-check-api.你的帳號.workers.dev）
+  // 留空 = 示範模式：不會真的檢核，只顯示範例結果讓你看畫面。
+  apiUrl: "",
+};
+
+const MAX_TOTAL_MB = 28;          // 全部檔案轉換後的總大小上限
+const IMAGE_MAX_EDGE = 2400;      // 照片長邊縮到這個像素，省流量又看得清楚
+const LIBS = {
+  mammoth: "https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js",
+  xlsx: "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js",
+  heic: "https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js",
+};
+
+// ===== 小工具 =====
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmtSize = (n) => n > 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB";
+const store = {
+  get(k) { try { return localStorage.getItem(k) || ""; } catch { return ""; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+};
+const loaded = {};
+function loadScript(src) {
+  if (!loaded[src]) {
+    loaded[src] = new Promise((ok, no) => {
+      const s = document.createElement("script");
+      s.src = src; s.onload = ok; s.onerror = () => no(new Error("無法載入轉檔工具，請檢查網路"));
+      document.head.appendChild(s);
+    });
+  }
+  return loaded[src];
+}
+function readAs(file, how) {
+  return new Promise((ok, no) => {
+    const r = new FileReader();
+    r.onload = () => ok(r.result);
+    r.onerror = () => no(r.error);
+    r[how](file);
+  });
+}
+const b64 = async (blob) => (await readAs(blob, "readAsDataURL")).split(",")[1];
+
+// ===== 檔案轉換：全部在你的瀏覽器裡完成 =====
+function extOf(name) { return (name.split(".").pop() || "").toLowerCase(); }
+
+async function shrinkImage(blob) {
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = await new Promise((ok, no) => {
+      const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error("圖片無法開啟")); i.src = url;
+    });
+    const scale = Math.min(1, IMAGE_MAX_EDGE / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.round(img.naturalWidth * scale), h = Math.round(img.naturalHeight * scale);
+    const c = document.createElement("canvas");
+    c.width = w; c.height = h;
+    const ctx = c.getContext("2d");
+    ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(img, 0, 0, w, h);
+    const out = await new Promise((ok) => c.toBlob(ok, "image/jpeg", 0.85));
+    return { blob: out, thumb: c.toDataURL("image/jpeg", 0.4) };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+async function convert(file) {
+  const ext = extOf(file.name);
+  if (ext === "pdf" || file.type === "application/pdf") {
+    return { kind: "pdf", media_type: "application/pdf", data: await b64(file), label: "PDF" };
+  }
+  if (ext === "heic" || ext === "heif" || /heic|heif/.test(file.type)) {
+    await loadScript(LIBS.heic);
+    const jpg = await window.heic2any({ blob: file, toType: "image/jpeg", quality: 0.9 });
+    const { blob, thumb } = await shrinkImage(Array.isArray(jpg) ? jpg[0] : jpg);
+    return { kind: "image", media_type: "image/jpeg", data: await b64(blob), thumb, label: "圖" };
+  }
+  if (file.type.startsWith("image/") || ["jpg", "jpeg", "png", "webp", "gif"].includes(ext)) {
+    const { blob, thumb } = await shrinkImage(file);
+    return { kind: "image", media_type: "image/jpeg", data: await b64(blob), thumb, label: "圖" };
+  }
+  if (ext === "docx") {
+    await loadScript(LIBS.mammoth);
+    const { value } = await window.mammoth.convertToHtml({ arrayBuffer: await readAs(file, "readAsArrayBuffer") });
+    return { kind: "text", data: value, label: "W" };
+  }
+  if (["xlsx", "xls", "csv"].includes(ext)) {
+    await loadScript(LIBS.xlsx);
+    const wb = window.XLSX.read(await readAs(file, "readAsArrayBuffer"), { type: "array" });
+    const text = wb.SheetNames.map((n) => `## 工作表：${n}\n` + window.XLSX.utils.sheet_to_csv(wb.Sheets[n])).join("\n\n");
+    return { kind: "text", data: text, label: "X" };
+  }
+  if (ext === "txt" || file.type.startsWith("text/")) {
+    return { kind: "text", data: await readAs(file, "readAsText"), label: "T" };
+  }
+  if (ext === "doc") throw new Error("舊版 .doc 請先另存成 .docx 或 PDF");
+  throw new Error("不支援這種檔案");
+}
+
+// ===== 檔案清單 =====
+const items = []; // { id, file, status: 'converting'|'ready'|'error', out, error }
+let nextId = 1;
+
+function addFiles(list) {
+  for (const file of list) {
+    const it = { id: nextId++, file, status: "converting" };
+    items.push(it);
+    convert(file)
+      .then((out) => { it.out = out; it.status = "ready"; })
+      .catch((e) => { it.status = "error"; it.error = e.message || String(e); })
+      .finally(renderFiles);
+  }
+  renderFiles();
+}
+
+function totalBytes() {
+  return items.reduce((n, it) => n + (it.out ? it.out.data.length : 0), 0);
+}
+
+function renderFiles() {
+  $("fileList").innerHTML = items.map((it) => {
+    const icon = it.out?.thumb ? `<img src="${it.out.thumb}" alt="">` : esc(it.out?.label || extOf(it.file.name).toUpperCase().slice(0, 4));
+    const sub = it.status === "converting" ? "處理中…"
+      : it.status === "error" ? "⚠ " + esc(it.error)
+      : "就緒 · " + fmtSize(it.file.size);
+    return `<li><div class="icon">${icon}</div>
+      <div class="meta"><div class="name">${esc(it.file.name)}</div>
+      <div class="sub ${it.status === "error" ? "err" : ""}">${sub}</div></div>
+      <button aria-label="移除" data-remove="${it.id}">×</button></li>`;
+  }).join("");
+  const ready = items.filter((it) => it.status === "ready").length;
+  const busy = items.some((it) => it.status === "converting");
+  const tooBig = totalBytes() > MAX_TOTAL_MB * 1048576;
+  $("checkBtn").disabled = !ready || busy || checking || tooBig;
+  $("status").textContent = tooBig ? `檔案總大小超過 ${MAX_TOTAL_MB} MB，請分批上傳或移除部分檔案`
+    : busy ? "正在處理檔案…" : ready ? `${ready} 個檔案準備好了` : "";
+}
+
+$("fileList").addEventListener("click", (e) => {
+  const id = Number(e.target.dataset.remove);
+  if (!id) return;
+  const i = items.findIndex((it) => it.id === id);
+  if (i >= 0) items.splice(i, 1);
+  renderFiles();
+});
+$("fileInput").addEventListener("change", (e) => { addFiles(e.target.files); e.target.value = ""; });
+const drop = $("drop");
+["dragenter", "dragover"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", (e) => addFiles(e.dataTransfer.files));
+
+// ===== 檢核 =====
+let checking = false;
+$("accessCode").value = store.get("docCheckCode");
+if (!CONFIG.apiUrl) $("codeField").hidden = true;
+
+$("checkBtn").addEventListener("click", async () => {
+  const ready = items.filter((it) => it.status === "ready");
+  if (!ready.length) return;
+  checking = true;
+  $("error").hidden = true;
+  $("result").innerHTML = "";
+  const btn = $("checkBtn");
+  btn.innerHTML = '<span class="spinner"></span>檢核中…';
+  renderFiles();
+  const started = Date.now();
+  const tick = setInterval(() => {
+    const s = Math.round((Date.now() - started) / 1000);
+    $("status").textContent = `AI 正在逐頁檢查，通常需要 1～3 分鐘，請不要關閉頁面（已 ${s} 秒）`;
+  }, 1000);
+
+  try {
+    let result;
+    if (!CONFIG.apiUrl) {
+      await new Promise((r) => setTimeout(r, 1500));
+      result = DEMO_RESULT;
+    } else {
+      const code = $("accessCode").value.trim();
+      store.set("docCheckCode", code);
+      const res = await fetch(CONFIG.apiUrl.replace(/\/$/, "") + "/check", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-access-code": code },
+        body: JSON.stringify({
+          note: $("note").value,
+          files: ready.map((it) => ({ name: it.file.name, kind: it.out.kind, media_type: it.out.media_type, data: it.out.data })),
+        }),
+      });
+      const data = await res.json().catch(() => ({ error: `伺服器回應異常（${res.status}）` }));
+      if (!res.ok || data.error) throw new Error(data.error || `伺服器錯誤（${res.status}）`);
+      result = data;
+    }
+    renderResult(result, !CONFIG.apiUrl);
+    $("status").textContent = "";
+    $("result").scrollIntoView({ behavior: "smooth", block: "start" });
+  } catch (e) {
+    $("error").textContent = "檢核失敗：" + (e.message === "Failed to fetch" ? "連不到檢核伺服器，請檢查網路或伺服器網址" : e.message);
+    $("error").hidden = false;
+    $("status").textContent = "";
+  } finally {
+    clearInterval(tick);
+    checking = false;
+    btn.textContent = "開始檢核";
+    renderFiles();
+  }
+});
+
+// ===== 結果 =====
+const LABEL = { pass: "通過", fail: "不通過", warn: "需確認", na: "不適用" };
+const OVERALL = { pass: "✅ 全部通過，可以送件", warn: "⚠️ 有項目需要人工確認", fail: "❌ 不通過，請修正後再送件" };
+
+function itemHtml(it) {
+  const rows = [
+    ["位置", it.location], ["發現", it.finding], ["修正", it.fix],
+  ].filter(([, v]) => v).map(([k, v]) => `<dt>${k}</dt><dd class="${k === "修正" ? "fix" : ""}">${esc(v)}</dd>`).join("");
+  return `<div class="item"><div class="head"><span class="chip ${esc(it.status)}">${LABEL[it.status] || esc(it.status)}</span>
+    <div><div class="rule">${esc(it.rule_id)}　${esc(it.rule)}</div><div class="doc-name">${esc(it.doc)}</div></div></div>
+    ${rows ? `<dl>${rows}</dl>` : ""}</div>`;
+}
+
+function reportText(r) {
+  const lines = [`【任用送件檢核】${r.applicant_name}`, OVERALL[r.overall].replace(/^\S+\s/, ""), r.headline, ""];
+  const missing = r.documents.filter((d) => !d.found);
+  if (missing.length) lines.push("缺少文件：" + missing.map((d) => `文件${d.doc_no} ${d.title}`).join("、"), "");
+  let n = 1;
+  for (const status of ["fail", "warn"]) {
+    const list = r.items.filter((i) => i.status === status);
+    if (!list.length) continue;
+    lines.push(status === "fail" ? "■ 不通過（必須修正）" : "■ 需確認");
+    for (const it of list) {
+      lines.push(`${n++}. [${it.rule_id}] ${it.doc}｜${it.rule}`);
+      if (it.location) lines.push(`   位置：${it.location}`);
+      if (it.finding) lines.push(`   發現：${it.finding}`);
+      if (it.fix) lines.push(`   修正：${it.fix}`);
+    }
+    lines.push("");
+  }
+  return lines.join("\n").trim();
+}
+
+function renderResult(r, isDemo) {
+  const by = (s) => r.items.filter((i) => i.status === s);
+  const counts = ["fail", "warn", "pass", "na"].map((s) => `<span class="chip ${s}">${LABEL[s]} ${by(s).length}</span>`).join("");
+  const docs = r.documents.map((d) => `<div class="doc ${d.found ? "" : "missing"}">
+    <b>${d.found ? "✓" : "✗"} 文件${esc(d.doc_no)}</b>${esc(d.title)}<div class="src">${esc(d.source)}</div></div>`).join("");
+  const section = (s, title, open) => {
+    const list = by(s);
+    if (!list.length) return "";
+    const body = list.map(itemHtml).join("");
+    return open
+      ? `<section class="card"><h2>${title}（${list.length}）</h2>${body}</section>`
+      : `<section class="card"><details><summary>${title}（${list.length}）</summary>${body}</details></section>`;
+  };
+  $("result").innerHTML = `
+    ${isDemo ? '<div class="demo-note no-print">這是<b>示範結果</b>，還沒有連上檢核伺服器。部署完成後把網址填進 CONFIG.apiUrl 就會真的檢核你上傳的檔案。</div>' : ""}
+    <div class="banner ${esc(r.overall)}">
+      <div class="big">${OVERALL[r.overall] || esc(r.overall)}</div>
+      <div class="who">應徵者：${esc(r.applicant_name)}　·　檢核時間：${new Date().toLocaleString("zh-TW")}</div>
+      <div class="line">${esc(r.headline)}</div>
+      <div class="counts">${counts}</div>
+    </div>
+    <div class="row no-print" style="margin-top:12px">
+      <button class="btn ghost" id="copyBtn">📋 複製不通過說明</button>
+      <button class="btn ghost" id="printBtn">🖨️ 下載報告 (PDF)</button>
+    </div>
+    <section class="card"><h2>文件是否齊全</h2><div class="docs">${docs}</div></section>
+    ${section("fail", "❌ 不通過（必須修正）", true)}
+    ${section("warn", "⚠️ 需人工確認", true)}
+    ${section("pass", "✅ 通過的項目", false)}
+    ${section("na", "不適用的項目", false)}
+    <p class="muted">AI 檢核結果僅供參考，送件前請承辦人再次確認。${r.usage ? `（本次用量：輸入 ${r.usage.input_tokens.toLocaleString()}、輸出 ${r.usage.output_tokens.toLocaleString()} tokens）` : ""}</p>`;
+
+  $("copyBtn").onclick = async () => {
+    const text = reportText(r);
+    try { await navigator.clipboard.writeText(text); $("copyBtn").textContent = "✓ 已複製"; }
+    catch { prompt("請手動複製：", text); }
+    setTimeout(() => ($("copyBtn").textContent = "📋 複製不通過說明"), 2000);
+  };
+  $("printBtn").onclick = () => {
+    document.querySelectorAll("#result details").forEach((d) => (d.open = true));
+    window.print();
+  };
+}
+
+// 示範模式用的範例結果（依你提供的範例文件內容編寫）
+const DEMO_RESULT = {
+  overall: "fail",
+  applicant_name: "（已遮蔽）",
+  headline: "文件 1～7 都有附，但有 2 項不通過、3 項需確認，請修正後再送件。",
+  documents: [
+    { doc_no: "1", title: "任用意見表", found: true, source: "範例.pdf 第 1 頁" },
+    { doc_no: "2", title: "新進員工面談紀錄表", found: true, source: "範例.pdf 第 2 頁" },
+    { doc_no: "3", title: "履歷資料表", found: true, source: "範例.pdf 第 3～5 頁" },
+    { doc_no: "4", title: "畢業證書影本", found: false, source: "未附" },
+    { doc_no: "5", title: "任用效益評估", found: true, source: "範例.pdf 第 6 頁" },
+    { doc_no: "6", title: "徵信", found: true, source: "範例.pdf 第 7 頁" },
+    { doc_no: "7", title: "一類票查", found: true, source: "範例.pdf 第 8 頁" },
+  ],
+  items: [
+    { rule_id: "1-1", doc: "文件1 任用意見表", rule: "使用最新版表單", status: "pass", finding: "版本日期 2026/06/23，為最新版。", location: "第 1 頁右下", fix: "" },
+    { rule_id: "1-11", doc: "文件1 任用意見表", rule: "工作班別需改為分公司班別 08:00-16:30", status: "pass", finding: "已勾選公司班別 08:00~16:30。", location: "第 1 頁 工作班別", fix: "" },
+    { rule_id: "1-15", doc: "文件1 任用意見表", rule: "薪資總額 = 本薪 + 伙食 3,000", status: "warn", finding: "本薪欄位已遮蔽，無法驗算總額。", location: "第 1 頁 薪資總額", fix: "請人工確認本薪＋伙食 3,000 是否等於薪資總額，且不是上一位應徵者的數字。" },
+    { rule_id: "2-8", doc: "文件2 面談紀錄表", rule: "GAI/AI 能力：使用工具建議填寫", status: "warn", finding: "「使用工具」欄位空白。", location: "第 2 頁 請評核 GAI/AI 能力", fix: "請面試主管補填應徵者使用的 AI 工具（例如 ChatGPT、Copilot），沒有就寫「無」。" },
+    { rule_id: "3-15", doc: "文件3 履歷資料表", rule: "照會人服務單位必須是工作經歷中有任職過的公司", status: "fail", finding: "照會人 1 的服務單位填「B公司」，但比對後應徵者照會的直屬主管應屬「A公司」（目前在職公司）。", location: "第 5 頁 應徵資訊－照會人", fix: "請改填工作經歷表上有任職過的公司（A公司）的直屬主管；主管已離職也請寫 A公司，以利核對。" },
+    { rule_id: "3-18", doc: "文件3 履歷資料表", rule: "應徵者必須親自簽名並填日期", status: "warn", finding: "填表人簽名與日期空白。目前為 2026 年，2027 年起未簽名將不予送件。", location: "第 5 頁 聲明事項下方", fix: "請應徵者簽名並填寫西元日期，以免報到當天延誤。" },
+    { rule_id: "4-1", doc: "文件4 畢業證書影本", rule: "已畢業者必須附最高學歷畢業證書", status: "fail", finding: "履歷資料表最高學歷為已畢業（學士），但送件中沒有找到畢業證書影本。", location: "未附", fix: "請補附最高學歷畢業證書影本，校名需與履歷表一致。" },
+    { rule_id: "6-3", doc: "文件6 徵信", rule: "各項異常紀錄應全部為 N", status: "pass", finding: "冒名開戶、訴訟判決、違約、被解除職務紀錄等全部為 N。", location: "第 7 頁", fix: "" },
+    { rule_id: "7-3", doc: "文件7 一類票查", rule: "退票紀錄應全部為 0", status: "pass", finding: "四項退票理由之張數、金額皆為 0，無拒絕往來紀錄，有票據交換所戳章 2026.9.23。", location: "第 8 頁", fix: "" },
+  ],
+};
+
+renderFiles();
+</script>
+</body>
+</html>
