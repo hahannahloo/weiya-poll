@@ -1,7 +1,8 @@
 // 任用送件檢核伺服器：收到網頁傳來的檔案，交給 Claude 依 rules.js 的標準檢核，回傳結果。
 // 金鑰只存在 Cloudflare（ANTHROPIC_API_KEY），不會出現在網頁上。檔案不會被儲存。
 import Anthropic from "@anthropic-ai/sdk";
-import { SYSTEM_PROMPT, OUTPUT_SCHEMA } from "./rules.js";
+import { SYSTEM_PROMPT, OUTPUT_SCHEMA, HOLIDAYS } from "./rules.js";
+import { reportDateTable } from "./calendar.js";
 
 const MODEL = "claude-opus-5-5";
 const MAX_FILES = 40;
@@ -91,7 +92,7 @@ export default {
       : "\n送件單位：未指定，請依任用單位欄位自動判斷。";
     content.push({
       type: "text",
-      text: `今天日期：${today}。以上是這次的送件，共 ${files.length} 個檔案。請依檢核標準逐條檢核。${unit}${note}`,
+      text: `今天日期：${today}。以上是這次的送件，共 ${files.length} 個檔案。請依檢核標準逐條檢核。${unit}${note}\n\n可報到日期表（每週第一個工作日、每月第一個工作日，已排除週末與國定假日；報到日期不在表上即不通過）：\n${reportDateTable(HOLIDAYS)}`,
     });
 
     const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
