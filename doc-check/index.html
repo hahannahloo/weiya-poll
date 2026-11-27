@@ -4,42 +4,44 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>入職小幫手 HR Helper</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg%20viewBox%3D%220%200%2064%2064%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2216%22%20fill%3D%22%23b3261e%22/%3E%3Cpath%20d%3D%22M18%2012h20l10%2010v28a3%203%200%200%201-3%203H18a3%203%200%200%201-3-3V15a3%203%200%200%201%203-3z%22%20fill%3D%22%23fff%22/%3E%3Cpath%20d%3D%22M38%2012v8a2%202%200%200%200%202%202h8z%22%20fill%3D%22%23f3c5c2%22/%3E%3Ccircle%20cx%3D%2229%22%20cy%3D%2228%22%20r%3D%225%22%20fill%3D%22%23b3261e%22/%3E%3Cpath%20d%3D%22M20%2042c0-5%204-8%209-8s9%203%209%208z%22%20fill%3D%22%23b3261e%22/%3E%3Ccircle%20cx%3D%2246%22%20cy%3D%2247%22%20r%3D%2210%22%20fill%3D%22%2316794a%22%20stroke%3D%22%23fff%22%20stroke-width%3D%223%22/%3E%3Cpath%20d%3D%22M41%2047l3.5%203.5L51%2044%22%20fill%3D%22none%22%20stroke%3D%22%23fff%22%20stroke-width%3D%223%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20viewBox%3D%220%200%2064%2064%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2218%22%20fill%3D%22%23a5847c%22/%3E%3Ccircle%20cx%3D%2247%22%20cy%3D%2217%22%20r%3D%225%22%20fill%3D%22%23e9d9c6%22/%3E%3Cpath%20d%3D%22M23%2016c5-1%209%200%2011%206%203%2011%208%2020%2017%2026%22%20fill%3D%22none%22%20stroke%3D%22%23fbfaf7%22%20stroke-width%3D%225.5%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22/%3E%3Cpath%20d%3D%22M32%2026c-3%209-8%2016-17%2022%22%20fill%3D%22none%22%20stroke%3D%22%23fbfaf7%22%20stroke-width%3D%225.5%22%20stroke-linecap%3D%22round%22/%3E%3C/svg%3E">
 <style>
 :root {
-  --bg: #f5f6f8; --card: #ffffff; --text: #1d2430; --muted: #667085; --line: #e3e6eb;
-  --brand: #b3261e; --brand-soft: #fbeceb;
-  --pass: #16794a; --pass-soft: #e6f4ec;
-  --fail: #c62828; --fail-soft: #fdecec;
-  --warn: #a15c00; --warn-soft: #fff4e0;
-  --na: #667085; --na-soft: #eff1f4;
-  --shadow: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.08);
-  /* 五個步驟的顏色：傳、審、改、印、送 */
-  --s1: #b3261e; --s1-soft: #fbeceb;
-  --s2: #b26a00; --s2-soft: #fff3df;
-  --s3: #7b3fa8; --s3-soft: #f3ebfa;
-  --s4: #1f62b5; --s4-soft: #e8f0fb;
-  --s5: #16794a; --s5-soft: #e6f4ec;
+  --bg: #f2efea; --card: #fbfaf7; --text: #3d3934; --muted: #7f776e; --line: #e1dbd2;
+  --brand: #8f6a62; --brand-soft: #efe4e0;
+  --pass: #5e7a5f; --pass-soft: #e4ebe2;
+  --fail: #9c5a52; --fail-soft: #f2e3df;
+  --warn: #8c6f3a; --warn-soft: #f2eadb;
+  --na: #7f776e; --na-soft: #ebe7e1;
+  --shadow: 0 1px 2px rgba(61,57,52,.05), 0 2px 6px rgba(61,57,52,.06);
+  /* 五個步驟的顏色（莫蘭迪色）：傳、審、改、印、送 */
+  --s1: #9a6f67; --s1-soft: #f0e5e1;
+  --s2: #957a4c; --s2-soft: #f1eadc;
+  --s3: #7c6b88; --s3-soft: #ebe6ef;
+  --s4: #5f7486; --s4-soft: #e3e9ee;
+  --s5: #627d67; --s5-soft: #e3ebe3;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #12151a; --card: #1b1f26; --text: #e7eaee; --muted: #98a2b3; --line: #2c323c;
-    --brand: #ef6b63; --brand-soft: #3a1f1e;
-    --pass: #4cc38a; --pass-soft: #16301f; --fail: #f2706a; --fail-soft: #3a1c1c;
-    --warn: #f0b450; --warn-soft: #3a2c12; --na: #98a2b3; --na-soft: #262b33;
+    --bg: #262320; --card: #302c28; --text: #ebe5dd; --muted: #a89f95; --line: #433d37;
+    --brand: #c99a90; --brand-soft: #3d302c;
+    --pass: #a3bc9f; --pass-soft: #2d3a2d; --fail: #d79b92; --fail-soft: #43302c;
+    --warn: #d6b77c; --warn-soft: #3f3624; --na: #a89f95; --na-soft: #37322d;
     --shadow: none;
-    --s1: #ef6b63; --s1-soft: #3a1f1e; --s2: #f0b450; --s2-soft: #3a2c12; --s3: #c59ae8; --s3-soft: #2d2238;
-    --s4: #7fb0f0; --s4-soft: #1b2a3d; --s5: #4cc38a; --s5-soft: #16301f;
+    --s1: #c99a90; --s1-soft: #3d302c; --s2: #cdb07d; --s2-soft: #3d3526; --s3: #b3a0c0; --s3-soft: #36303d;
+    --s4: #9fb3c4; --s4-soft: #2c3540; --s5: #a3bc9f; --s5-soft: #2d3a2d;
+    color-scheme: dark; --on-c: #262320;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #12151a; --card: #1b1f26; --text: #e7eaee; --muted: #98a2b3; --line: #2c323c;
-  --brand: #ef6b63; --brand-soft: #3a1f1e;
-  --pass: #4cc38a; --pass-soft: #16301f; --fail: #f2706a; --fail-soft: #3a1c1c;
-  --warn: #f0b450; --warn-soft: #3a2c12; --na: #98a2b3; --na-soft: #262b33;
+  --bg: #262320; --card: #302c28; --text: #ebe5dd; --muted: #a89f95; --line: #433d37;
+  --brand: #c99a90; --brand-soft: #3d302c;
+  --pass: #a3bc9f; --pass-soft: #2d3a2d; --fail: #d79b92; --fail-soft: #43302c;
+  --warn: #d6b77c; --warn-soft: #3f3624; --na: #a89f95; --na-soft: #37322d;
   --shadow: none;
-  --s1: #ef6b63; --s1-soft: #3a1f1e; --s2: #f0b450; --s2-soft: #3a2c12; --s3: #c59ae8; --s3-soft: #2d2238;
-  --s4: #7fb0f0; --s4-soft: #1b2a3d; --s5: #4cc38a; --s5-soft: #16301f;
+  --s1: #c99a90; --s1-soft: #3d302c; --s2: #cdb07d; --s2-soft: #3d3526; --s3: #b3a0c0; --s3-soft: #36303d;
+  --s4: #9fb3c4; --s4-soft: #2c3540; --s5: #a3bc9f; --s5-soft: #2d3a2d;
+  color-scheme: dark; --on-c: #262320;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -82,7 +84,7 @@ textarea { min-height: 64px; resize: vertical; }
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   border: 0; border-radius: 12px; padding: 12px 18px; font: inherit; font-weight: 600; cursor: pointer;
-  background: var(--brand); color: #fff;
+  background: var(--brand); color: var(--on-c, #fff);
 }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 .btn.ghost { background: var(--card); color: var(--text); border: 1px solid var(--line); }
@@ -91,7 +93,7 @@ textarea { min-height: 64px; resize: vertical; }
 .row .btn { flex: 1 1 140px; }
 
 .status { margin-top: 12px; text-align: center; color: var(--muted); font-size: .92rem; }
-.spinner { width: 18px; height: 18px; border: 3px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%; animation: spin 1s linear infinite; }
+.spinner { width: 18px; height: 18px; border: 3px solid rgba(255,255,255,.4); border-top-color: currentColor; border-radius: 50%; animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .error { margin-top: 12px; padding: 12px; border-radius: 10px; background: var(--fail-soft); color: var(--fail); }
 
@@ -134,7 +136,7 @@ details summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
 .userbar .who { flex: 1 1 auto; min-width: 0; color: var(--muted); }
 .userbar .who b { color: var(--text); }
 .linkbtn { border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 999px; padding: 5px 12px; font: inherit; font-size: .88rem; cursor: pointer; }
-.linkbtn.on { background: var(--brand); border-color: var(--brand); color: #fff; }
+.linkbtn.on { background: var(--brand); border-color: var(--brand); color: var(--on-c, #fff); }
 .linkbtn.danger { color: var(--fail); }
 .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0 12px; }
 .check-row { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: .92rem; }
@@ -159,8 +161,8 @@ table.list td.nowrap { white-space: nowrap; }
 .step .lb { display: block; font-size: .78rem; font-weight: 600; }
 .step .cp { display: none; font-size: .76rem; margin-top: 4px; line-height: 1.45; text-align: left; padding: 0 4px; }
 .step.done { background: var(--c-soft); color: var(--c); }
-.step.now { background: var(--c); color: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.15); }
-.step.now .cp { color: #fff; }
+.step.now { background: var(--c); color: var(--on-c, #fff); box-shadow: 0 2px 8px rgba(61,57,52,.18); }
+.step.now .cp { color: var(--on-c, #fff); }
 .step.done .lb::after { content: " ✓"; }
 .step:nth-child(1) { --c: var(--s1); --c-soft: var(--s1-soft); }
 .step:nth-child(2) { --c: var(--s2); --c-soft: var(--s2-soft); }
@@ -176,7 +178,7 @@ table.list td.nowrap { white-space: nowrap; }
 .next { border-radius: 14px; padding: 14px 16px; margin-top: 16px; border: 2px solid var(--c); background: var(--c-soft); }
 .next h3 { margin: 0 0 4px; font-size: 1.05rem; color: var(--c); }
 .next p { margin: 0 0 10px; }
-.next .btn { background: var(--c); }
+.next .btn { background: var(--c); color: var(--on-c, #fff); }
 .checklist { margin: 8px 0 0; padding-left: 1.4em; font-size: .9rem; color: var(--muted); }
 .print-only { display: none; }
 
@@ -197,7 +199,7 @@ table.list td.nowrap { white-space: nowrap; }
 <div class="wrap">
   <header>
     <div class="brand">
-      <svg viewBox="0 0 64 64" width="52" height="52" aria-hidden="true"><rect width="64" height="64" rx="16" fill="#b3261e"/><path d="M18 12h20l10 10v28a3 3 0 0 1-3 3H18a3 3 0 0 1-3-3V15a3 3 0 0 1 3-3z" fill="#fff"/><path d="M38 12v8a2 2 0 0 0 2 2h8z" fill="#f3c5c2"/><circle cx="29" cy="28" r="5" fill="#b3261e"/><path d="M20 42c0-5 4-8 9-8s9 3 9 8z" fill="#b3261e"/><circle cx="46" cy="47" r="10" fill="#16794a" stroke="#fff" stroke-width="3"/><path d="M41 47l3.5 3.5L51 44" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <svg viewBox="0 0 64 64" width="52" height="52" aria-hidden="true"><rect width="64" height="64" rx="18" fill="#a5847c"/><circle cx="47" cy="17" r="5" fill="#e9d9c6"/><path d="M23 16c5-1 9 0 11 6 3 11 8 20 17 26" fill="none" stroke="#fbfaf7" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M32 26c-3 9-8 16-17 22" fill="none" stroke="#fbfaf7" stroke-width="5.5" stroke-linecap="round"/></svg>
       <div><div class="eyebrow">HR HELPER</div><h1>入職小幫手｜任用資料審核</h1></div>
     </div>
     <div class="userbar no-print" id="userBar" hidden>
