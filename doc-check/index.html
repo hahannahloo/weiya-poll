@@ -279,6 +279,7 @@ table.list td.nowrap { white-space: nowrap; }
   </nav>
   <div class="step-hint muted no-print" id="stepHint"></div>
 
+  <div class="demo-note no-print" id="trialBanner" hidden><b>🧪 試用版：會真的用 AI 檢核</b>，使用的是你自己的 Claude 帳號額度（第一次會詢問是否允許）。試用版不需要登入，也不會保存紀錄；PDF 會先轉成圖片再交給 AI，解析度比正式版低，小字可能較難辨識。</div>
   <div class="demo-note no-print" id="demoBanner" hidden><b>⚠ 示範模式：還沒有連上檢核伺服器。</b>現在上傳的檔案不會被檢查，按下按鈕只會顯示一份固定的範例結果。部署伺服器並設定網址後，才會真的檢核。</div>
 
   <section class="card no-print" id="uploadCard">
@@ -434,6 +435,8 @@ const LIBS = {
   mammoth: "https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js",
   xlsx: "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js",
   heic: "https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js",
+  pdf: "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js",
+  pdfWorker: "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js",
 };
 
 // ===== 小工具 =====
@@ -598,15 +601,151 @@ drop.addEventListener("drop", (e) => addFiles(e.dataTransfer.files));
 
 // ===== 檢核 =====
 let checking = false;
-if (!CONFIG.apiUrl) {
-  $("checkBtn").textContent = "查看示範結果（尚未連上檢核伺服器）";
-  $("demoBanner").hidden = false;
+let trialSample = null; // 試用版：預覽頁直接呼叫 Claude（沒有伺服器時）
+const trialMode = () => !CONFIG.apiUrl && !!trialSample;
+function showMode() {
+  if (CONFIG.apiUrl) return;
+  $("trialBanner").hidden = !trialSample;
+  $("demoBanner").hidden = !!trialSample;
+  if (!checking) $("checkBtn").textContent = trialSample ? "開始檢核（試用版）" : "查看示範結果（尚未連上檢核伺服器）";
 }
+showMode();
+
+// ===== 試用版：把檔案轉成圖片＋文字，交給 Claude =====
+async function pdfPages(file) {
+  if (!window.pdfjsLib) {
+    await loadScript(LIBS.pdfWorker); // 先載入 worker，讓 pdf.js 在主執行緒執行（預覽頁不能另開 worker）
+    await loadScript(LIBS.pdf);
+  }
+  const pdf = await window.pdfjsLib.getDocument({ data: new Uint8Array(await readAs(file, "readAsArrayBuffer")), isEvalSupported: false }).promise;
+  const pages = [];
+  for (let n = 1; n <= pdf.numPages; n++) {
+    const page = await pdf.getPage(n);
+    const base = page.getViewport({ scale: 1 });
+    const viewport = page.getViewport({ scale: 1800 / Math.max(base.width, base.height) });
+    const c = document.createElement("canvas");
+    c.width = Math.round(viewport.width); c.height = Math.round(viewport.height);
+    const ctx = c.getContext("2d");
+    ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    const tc = await page.getTextContent().catch(() => null);
+    const text = tc ? tc.items.map((i) => i.str).join(" ").replace(/\s+/g, " ").trim() : "";
+    pages.push({ canvas: c, text });
+  }
+  return pages;
+}
+const canvasBlob = (c) => new Promise((ok) => c.toBlob(ok, "image/jpeg", 0.88));
+async function imageCanvas(blob) {
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = url; });
+    const c = document.createElement("canvas");
+    c.width = img.naturalWidth; c.height = img.naturalHeight;
+    c.getContext("2d").drawImage(img, 0, 0);
+    return c;
+  } finally { URL.revokeObjectURL(url); }
+}
+// 一頁切成上下兩半（中間重疊一點），解析度不夠時讓小字看得清楚
+async function halves(c) {
+  const h = Math.round(c.height * 0.55), out = [];
+  for (const y of [0, c.height - h]) {
+    const part = document.createElement("canvas");
+    part.width = c.width; part.height = h;
+    part.getContext("2d").drawImage(c, 0, y, c.width, h, 0, 0, c.width, h);
+    out.push(await canvasBlob(part));
+  }
+  return out;
+}
+
+async function trialCheck(ready, unit, note) {
+  const rules = TRIAL.RULES[unit];
+  const limits = await trialSample.limits().catch(() => null);
+  const maxImages = limits?.images?.maxCount || 0;
+  // 1. 收集每一頁（圖片頁）與文字
+  const pages = []; // {file, label, canvas}
+  const texts = [];
+  const meta = [];  // 給防漏檢查用的檔案清單
+  let fileNo = 0;
+  for (const it of ready) {
+    for (const f of payloadOf(it.file.name, it.out)) {
+      fileNo++;
+      meta.push({ name: f.name, embedded: !!f.embedded });
+      const label = `【檔案 ${fileNo}：${f.name}】`;
+      if (f.kind === "pdf") {
+        $("status").textContent = `正在把 ${f.name} 轉成圖片…`;
+        const ps = await pdfPages(it.file);
+        ps.forEach((p, i) => {
+          pages.push({ label: `${label} 第 ${i + 1} 頁`, canvas: p.canvas });
+          if (p.text) texts.push(`${label} 第 ${i + 1} 頁的文字（PDF 內嵌文字，供對照）：\n${p.text.slice(0, 6000)}`);
+        });
+      } else if (f.kind === "image") {
+        pages.push({ label: label + (f.embedded ? "（上一個 Word 檔裡的圖片）" : ""), canvas: await imageCanvas(b64Blob(f.data, f.media_type)) });
+      } else {
+        texts.push(`${label}（Word／Excel／文字檔轉出的內容）\n${f.data.slice(0, 60000)}`);
+      }
+    }
+  }
+  if (pages.length && !maxImages) throw new Error("這個檢視環境不能傳送圖片給 Claude，請改用電腦或手機的 claude.ai 開啟。");
+  if (pages.length > maxImages) throw new Error(`頁數太多：共 ${pages.length} 頁，試用版一次最多 ${maxImages} 張圖片。請分批上傳。`);
+  // 2. 圖片額度夠的話，每頁切上下兩半，小字比較清楚
+  const split = pages.length * 2 <= maxImages;
+  const images = [], imageNotes = [];
+  for (const p of pages) {
+    if (split && p.canvas.height >= 1000) {
+      const [a, b] = await halves(p.canvas);
+      images.push(a, b);
+      imageNotes.push(`圖片 ${images.length - 1}～${images.length}：${p.label}（上半部、下半部）`);
+    } else {
+      images.push(await canvasBlob(p.canvas));
+      imageNotes.push(`圖片 ${images.length}：${p.label}`);
+    }
+  }
+  // 3. 組合指示（與正式版相同的規則與格式）
+  const today = new Date().toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei" });
+  const prompt = [
+    TRIAL.systemPrompt(unit, rules),
+    "",
+    `今天日期：${today}。這次是「${unit}」的送件，使用者上傳了 ${fileNo} 個檔案。` + (note ? `\n承辦人補充說明：${note}` : ""),
+    imageNotes.length ? "附上的圖片依序如下（每張圖片都要看）：\n" + imageNotes.join("\n") : "",
+    texts.join("\n\n"),
+    "可報到日期表（每週第一個工作日、每月第一個工作日，已排除週末；試用版沒有國定假日資料，假日附近的日期請列為 warn）：\n" + TRIAL.reportDateTable({ holidays: new Set() }),
+    "",
+    "請依檢核標準逐條檢核，只回覆一個 JSON 物件，不要其他文字。格式必須符合這個 JSON Schema：",
+    JSON.stringify(TRIAL.OUTPUT_SCHEMA),
+  ].filter(Boolean).join("\n");
+  $("status").textContent = "已送出給 Claude，正在逐頁檢查（約 1～3 分鐘）…";
+  const raw = await trialSample.json(prompt, {
+    images, modelTier: "complex",
+    onText: ({ text }) => { $("status").textContent = `Claude 正在寫檢核結果…（${text.length} 字）`; },
+  });
+  // 4. 檢查格式，再做防漏檢查
+  if (!raw || !Array.isArray(raw.items) || !Array.isArray(raw.documents)) throw new Error("AI 回傳的格式不完整，請再試一次。");
+  const ok = new Set(["pass", "fail", "warn", "na"]);
+  raw.items = raw.items.map((i) => ({ rule_id: String(i.rule_id ?? ""), doc: String(i.doc ?? ""), rule: String(i.rule ?? ""),
+    status: ok.has(i.status) ? i.status : "warn", finding: String(i.finding ?? ""), location: String(i.location ?? ""), fix: String(i.fix ?? "") }));
+  raw.overall = raw.items.some((i) => i.status === "fail") ? "fail" : raw.items.some((i) => i.status === "warn") ? "warn" : "pass";
+  raw.applicant_name = String(raw.applicant_name ?? "（未辨識）");
+  raw.headline = String(raw.headline ?? "");
+  return TRIAL.ensureCoverage(raw, rules, meta);
+}
+
+const SAMPLE_ERRORS = {
+  not_granted: "你沒有允許這個頁面使用 Claude，所以無法檢核。",
+  sampling_disabled: "你的帳號目前不能從這個頁面使用 Claude。",
+  rate_limited: "使用量暫時到上限，請稍後再試。",
+  image_rejected: "有圖片無法處理（太大或格式不支援），請換一個檔案。",
+  images_unavailable: "這個檢視環境不能傳送圖片給 Claude，請改用電腦或手機的 claude.ai 開啟。",
+  prompt_too_large: "內容太多，請分批上傳。",
+  invalid_json: "AI 回傳的格式有誤，請再按一次「開始檢核」。",
+  refused: "AI 拒絕處理這份內容，請確認上傳的檔案是否正確。",
+  upstream_error: "連線暫時有問題，請再試一次。",
+  session_expired: "登入已過期，請重新登入 claude.ai。",
+};
 
 $("checkBtn").addEventListener("click", async () => {
   const ready = items.filter((it) => it.status === "ready");
   if (!ready.length) return;
-  if (CONFIG.apiUrl && !$("unit").value) {
+  if ((CONFIG.apiUrl || trialMode()) && !$("unit").value) {
     $("error").textContent = "請先選擇送件單位（分公司或總公司）";
     $("error").hidden = false;
     $("unit").focus();
@@ -629,7 +768,10 @@ $("checkBtn").addEventListener("click", async () => {
 
   try {
     let result;
-    if (!CONFIG.apiUrl) {
+    if (trialMode()) {
+      clearInterval(tick);
+      result = await trialCheck(ready, $("unit").value, $("note").value.trim());
+    } else if (!CONFIG.apiUrl) {
       await new Promise((r) => setTimeout(r, 1500));
       result = DEMO_RESULT;
     } else {
@@ -639,7 +781,7 @@ $("checkBtn").addEventListener("click", async () => {
         files: ready.flatMap((it) => payloadOf(it.file.name, it.out)),
       });
     }
-    renderResult(result, !CONFIG.apiUrl);
+    renderResult(result, !CONFIG.apiUrl && !trialMode());
     $("status").textContent = "";
     if (result.record_id) {
       $("result").insertAdjacentHTML("afterbegin", `<div class="ok-msg no-print">✓ 已存到「紀錄」，之後可以隨時回來查看。</div>`);
@@ -652,13 +794,14 @@ $("checkBtn").addEventListener("click", async () => {
     $("result").scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (e) {
     setStep(1);
-    $("error").textContent = "檢核失敗：" + (e.message === "Failed to fetch" ? "連不到檢核伺服器，請檢查網路或伺服器網址" : e.message);
+    const msg = e && e.code ? (SAMPLE_ERRORS[e.code] || `${e.code}：${e.message || ""}`) : e.message;
+    $("error").textContent = "檢核失敗：" + (msg === "Failed to fetch" ? "連不到檢核伺服器，請檢查網路或伺服器網址" : msg);
     $("error").hidden = false;
     $("status").textContent = "";
   } finally {
     clearInterval(tick);
     checking = false;
-    btn.textContent = CONFIG.apiUrl ? "開始檢核" : "查看示範結果（尚未連上檢核伺服器）";
+    btn.textContent = CONFIG.apiUrl ? "開始檢核" : trialSample ? "開始檢核（試用版）" : "查看示範結果（尚未連上檢核伺服器）";
     renderFiles();
   }
 });
@@ -673,6 +816,10 @@ async function loadChecklist() {
     return;
   }
   $("checklistTitle").textContent = `上傳清單：${unit}任用必備文件`;
+  if (trialMode()) {
+    $("checklist").innerHTML = TRIAL.checklistOf(TRIAL.RULES[unit]).map((d) => `<li value="${esc(d.no)}">${esc(d.title)}</li>`).join("");
+    return;
+  }
   if (!CONFIG.apiUrl) {
     $("checklist").innerHTML = unit === "分公司" ? DEMO_CHECKLIST.map((t) => `<li>${esc(t)}</li>`).join("")
       : DEMO_CHECKLIST.slice(0, 4).map((t) => `<li>${esc(t)}</li>`).join("");
@@ -742,7 +889,7 @@ function bindConfirm(box, recordId, done) {
     try {
       const items = boxes.map((x) => x.value);
       const c = recordId ? (await api(`/records/${recordId}/confirm`, { items })).confirmations
-        : { at: new Date().toISOString(), by: me?.name || "示範", items: warnsOf(lastCheck.result).map((i) => ({ rule_id: i.rule_id, rule: i.rule, finding: i.finding })) };
+        : { at: new Date().toISOString(), by: me?.name || "承辦人", items: warnsOf(lastCheck.result).map((i) => ({ rule_id: i.rule_id, rule: i.rule, finding: i.finding })) };
       done(c);
     } catch (err) {
       showError("confirmErr", err.message);
@@ -1504,6 +1651,11 @@ async function init() {
   }
   route();
   loadChecklist();
+  if (!CONFIG.apiUrl && typeof TRIAL !== "undefined" && window.claude?.use) {
+    trialSample = await window.claude.use("sample").catch(() => null);
+    showMode();
+    loadChecklist();
+  }
 }
 init();
 renderFiles();
