@@ -297,7 +297,7 @@ table.list td.nowrap { white-space: nowrap; }
       <input type="file" id="fileInput" multiple
         accept=".pdf,.jpg,.jpeg,.png,.webp,.gif,.heic,.heif,.docx,.xlsx,.xls,.csv,.txt,application/pdf,image/*">
       <strong>點這裡選擇檔案，或拖拉到這裡</strong>
-      <span>PDF、照片（JPG／PNG／HEIC）、Word、Excel 都可以，一次可上傳多個</span>
+      <span>PDF、Word、Excel、照片都可以，一次可上傳多個。Word 若能另存成 PDF 再上傳，判讀最準（版面、勾選、簽名都會保留）</span>
     </label>
     <ul class="files" id="fileList"></ul>
 
@@ -488,6 +488,11 @@ async function shrinkImage(blob) {
   }
 }
 
+// Word 表單常用 Wingdings 字型畫勾選框，轉成文字後是 AI 看不懂的私用字元，換成標準符號
+const WINGDINGS = { "\uF06F": "☐", "\uF0A8": "☐", "\uF071": "☐", "\uF072": "☐", "\uF06E": "■", "\uF0FE": "☑", "\uF0FD": "☒",
+  "\uF078": "☒", "\uF0FC": "✓", "\uF0FB": "✗", "\uF0A1": "○", "\uF06C": "●", "\uF0A4": "◉", "\uF0A2": "◎" };
+const fixWingdings = (t) => t.replace(/[\uE000-\uF8FF]/g, (c) => WINGDINGS[c] || "□");
+
 async function convert(file) {
   const ext = extOf(file.name);
   if (ext === "pdf" || file.type === "application/pdf") {
@@ -505,8 +510,23 @@ async function convert(file) {
   }
   if (ext === "docx") {
     await loadScript(LIBS.mammoth);
-    const { value } = await window.mammoth.convertToHtml({ arrayBuffer: await readAs(file, "readAsArrayBuffer") });
-    return { kind: "text", data: value, label: "W" };
+    // Word 裡的圖片（簽名、印章）抽出來另外附上，不要塞進文字裡
+    const pics = [];
+    const convertImage = window.mammoth.images.imgElement(async (img) => {
+      const n = pics.length + 1;
+      pics.push(img.read("base64").then(async (raw) => {
+        if (!/^image\/(png|jpe?g|gif|webp|bmp)$/.test(img.contentType)) return null; // EMF/WMF 等向量圖無法轉換
+        const { blob } = await shrinkImage(b64Blob(raw, img.contentType));
+        return { name: `${file.name} 的圖片${n}`, kind: "image", media_type: "image/jpeg", data: await b64(blob), embedded: true };
+      }).catch(() => null));
+      return { src: `#pic${n}`, alt: `圖片${n}` };
+    });
+    const { value } = await window.mammoth.convertToHtml({ arrayBuffer: await readAs(file, "readAsArrayBuffer") }, { convertImage });
+    const extra = (await Promise.all(pics)).filter(Boolean);
+    const html = fixWingdings(value).replace(/<img src="#pic(\d+)"[^>]*>/g, (m, n) => `[圖片${n}]`);
+    const note = "（Word 轉出的內容：☑☒■✓ 表示已勾選，☐ 表示未勾選；[圖片N] 是文件中的圖片"
+      + (extra.length ? "，另附於後" : "") + "。）\n";
+    return { kind: "text", data: note + html, label: "W", extra };
   }
   if (["xlsx", "xls", "csv"].includes(ext)) {
     await loadScript(LIBS.xlsx);
@@ -520,6 +540,9 @@ async function convert(file) {
   if (ext === "doc") throw new Error("舊版 .doc 請先另存成 .docx 或 PDF");
   throw new Error("不支援這種檔案");
 }
+
+// 送給伺服器的檔案：主檔案 + Word 裡抽出的圖片
+const payloadOf = (name, out) => [{ name, kind: out.kind, media_type: out.media_type, data: out.data }, ...(out.extra || [])];
 
 // ===== 檔案清單 =====
 const items = []; // { id, file, status: 'converting'|'ready'|'error', out, error }
@@ -538,7 +561,7 @@ function addFiles(list) {
 }
 
 function totalBytes() {
-  return items.reduce((n, it) => n + (it.out ? it.out.data.length : 0), 0);
+  return items.reduce((n, it) => n + (it.out ? it.out.data.length + (it.out.extra || []).reduce((m, x) => m + x.data.length, 0) : 0), 0);
 }
 
 function renderFiles() {
@@ -546,7 +569,7 @@ function renderFiles() {
     const icon = it.out?.thumb ? `<img src="${it.out.thumb}" alt="">` : esc(it.out?.label || extOf(it.file.name).toUpperCase().slice(0, 4));
     const sub = it.status === "converting" ? "處理中…"
       : it.status === "error" ? "⚠ " + esc(it.error)
-      : "就緒 · " + fmtSize(it.file.size);
+      : "就緒 · " + fmtSize(it.file.size) + (it.out?.extra?.length ? ` · 另含 ${it.out.extra.length} 張圖片` : "");
     return `<li><div class="icon">${icon}</div>
       <div class="meta"><div class="name">${esc(it.file.name)}</div>
       <div class="sub ${it.status === "error" ? "err" : ""}">${sub}</div></div>
@@ -613,7 +636,7 @@ $("checkBtn").addEventListener("click", async () => {
       result = await api("/check", {
         note: $("note").value,
         unit: $("unit").value,
-        files: ready.map((it) => ({ name: it.file.name, kind: it.out.kind, media_type: it.out.media_type, data: it.out.data })),
+        files: ready.flatMap((it) => payloadOf(it.file.name, it.out)),
       });
     }
     renderResult(result, !CONFIG.apiUrl);
@@ -621,7 +644,7 @@ $("checkBtn").addEventListener("click", async () => {
     if (result.record_id) {
       $("result").insertAdjacentHTML("afterbegin", `<div class="ok-msg no-print">✓ 已存到「紀錄」，之後可以隨時回來查看。</div>`);
     }
-    const sent = ready.map((it) => ({ name: it.file.name, kind: it.out.kind, media_type: it.out.media_type, data: it.out.data }));
+    const sent = ready.flatMap((it) => payloadOf(it.file.name, it.out));
     lastCheck = { result, recordId: result.record_id || null, printed: false, submittedAt: null };
     $("result").insertAdjacentHTML("beforeend", `<div class="no-print next" id="nextStep"></div>` + printDocsHtml(sent));
     $("result").querySelector(".banner").insertAdjacentElement("afterend", $("nextStep"));
@@ -945,7 +968,7 @@ $("calInput").addEventListener("change", async (e) => {
     const files = [];
     for (const f of list) {
       const out = await convert(f);
-      files.push({ name: f.name, kind: out.kind, media_type: out.media_type, data: out.data });
+      files.push(...payloadOf(f.name, out));
     }
     const data = await api("/calendar", { files });
     msg.innerHTML = `✅ 已更新 ${data.saved.map((y) => y.year + " 年").join("、")}，請核對下面的日期是否正確：`
@@ -1333,7 +1356,7 @@ $("draftBtn").addEventListener("click", async () => {
     const files = [];
     for (const f of list) {
       const out = await convert(f);
-      files.push({ name: f.name, kind: out.kind, media_type: out.media_type, data: out.data });
+      files.push(...payloadOf(f.name, out));
     }
     const { draft, baseVersion } = await api("/admin/rules/draft", { unit: ruleUnit, files, note: $("draftNote").value });
     $("rulesText").value = draft.rules_text;

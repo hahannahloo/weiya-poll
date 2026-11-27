@@ -4,6 +4,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { DurableObject } from "cloudflare:workers";
 import { systemPrompt, OUTPUT_SCHEMA, RULE_DRAFT_PROMPT, RULE_DRAFT_SCHEMA } from "./rules.js";
+import { ensureCoverage } from "./coverage.js";
 import { UNITS, currentRules, saveRules, ruleHistory, ruleVersion, checklistOf } from "./rulesets.js";
 import { reportDateTable } from "./calendar.js";
 import { CALENDAR_PROMPT, CALENDAR_SCHEMA, cleanCalendar } from "./holidays.js";
@@ -44,7 +45,7 @@ function toContent(files) {
       });
     } else if (f.kind === "image") {
       if (!IMAGE_TYPES.includes(f.media_type)) throw new Error(`不支援的圖片格式：${f.name}`);
-      content.push({ type: "text", text: label + "（圖片）" });
+      content.push({ type: "text", text: label + (f.embedded ? "（上一個 Word 檔裡的圖片）" : "（圖片）") });
       content.push({ type: "image", source: { type: "base64", media_type: f.media_type, data: f.data } });
     } else if (f.kind === "text") {
       content.push({ type: "text", text: `${label}（由 Word/Excel/文字檔轉出的內容）\n${f.data}` });
@@ -169,7 +170,8 @@ async function handleCheck(request, env, db, user) {
   const fileNames = files.map((f) => String(f.name || "").slice(0, 100));
   const keep = { user, files, note: String(body.note || "").slice(0, 2000), unit: body.unit, ruleVersion: ruleset.version };
   try {
-    const result = await askClaude(env, { system: systemPrompt(body.unit, ruleset.text), content, schema: OUTPUT_SCHEMA });
+    const raw = await askClaude(env, { system: systemPrompt(body.unit, ruleset.text), content, schema: OUTPUT_SCHEMA });
+    const result = ensureCoverage(raw, ruleset.text, files);
     const count = (s) => result.items.filter((i) => i.status === s).length;
     const id = await saveRecord(db, { ...keep, result });
     await addLog(db, {
